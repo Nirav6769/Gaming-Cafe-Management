@@ -38,6 +38,20 @@ ALTER TABLE public.maintenance_records
   DROP CONSTRAINT IF EXISTS maintenance_records_pkey;
 ALTER TABLE public.maintenance_records
   ADD CONSTRAINT maintenance_records_pkey PRIMARY KEY (maintenance_id);
+
+-- Preserve the original weak-entity uniqueness from schema.sql even though
+-- maintenance_id is now the row identifier used by the Operations API.
+DO $
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'maintenance_records_pc_date_unique'
+      AND conrelid = 'public.maintenance_records'::regclass
+  ) THEN
+    ALTER TABLE public.maintenance_records
+      ADD CONSTRAINT maintenance_records_pc_date_unique UNIQUE (pc_id, maintenance_date);
+  END IF;
+END $;
 ALTER TABLE public.maintenance_records
   ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMP;
 UPDATE public.maintenance_records SET resolved_at = CURRENT_TIMESTAMP WHERE resolved = TRUE AND resolved_at IS NULL;
