@@ -5,9 +5,17 @@ import { requireApiRole } from "@/lib/auth";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const auth = await requireApiRole(["admin", "staff"]);
+  const auth = await requireApiRole(["admin", "staff", "customer"]);
   if (auth.response) return auth.response;
   try {
+    if (auth.profile.role === "customer") {
+      const own = await pool.query(`SELECT s.session_id,s.customer_id,c.name AS customer_name,s.pc_id,p.pc_name,
+        s.start_time,s.expected_end_time,s.end_time,s.total_cost,
+        CASE WHEN s.end_time IS NULL THEN 'active' ELSE 'completed' END AS status
+        FROM gaming_sessions s JOIN customers c USING(customer_id) JOIN gaming_pcs p USING(pc_id)
+        WHERE s.customer_id=$1 ORDER BY s.start_time DESC LIMIT 100`,[auth.profile.customerId]);
+      return NextResponse.json(own.rows);
+    }
     const result = await pool.query(`SELECT s.session_id,s.customer_id,c.name AS customer_name,s.pc_id,p.pc_name,
       s.start_time,s.expected_end_time,s.end_time,s.total_cost,s.hourly_rate_snapshot,
       CASE WHEN s.end_time IS NULL THEN 'active' ELSE 'completed' END AS status
