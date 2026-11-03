@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
   const name = String(body?.name ?? "").trim();
   const email = String(body?.email ?? "").trim().toLowerCase();
   const phone = String(body?.phone ?? "").trim() || null;
-  if (!name || name.length > 100 || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) || email.length > 100) {
+  if (!name || name.length > 100 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 100) {
     return NextResponse.json({ error: "Enter a name and valid email address." }, { status: 400 });
   }
   try {
