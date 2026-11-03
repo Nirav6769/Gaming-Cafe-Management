@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query, errorMessage } from "@/lib/db";
+import { requireApiRole } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  const auth = await requireApiRole(["admin", "staff"]);
+  if (auth.response) return auth.response;
+
   try {
     const result = await query(`SELECT p.pc_id, p.pc_name, p.status, p.hourly_rate,
       s.session_id, s.start_time, c.name AS customer_name
@@ -18,6 +22,9 @@ export async function GET() {
 }
 
 export async function PATCH(request: NextRequest) {
+  const auth = await requireApiRole(["admin", "staff"]);
+  if (auth.response) return auth.response;
+
   const body = await request.json().catch(() => null);
   const pcId = Number(body?.pcId);
   const status = body?.status;

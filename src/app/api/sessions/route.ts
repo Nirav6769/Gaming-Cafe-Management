@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { pool, errorMessage } from "@/lib/db";
+import { requireApiRole } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  const auth = await requireApiRole(["admin", "staff"]);
+  if (auth.response) return auth.response;
+
   try {
     const result = await pool.query(`SELECT s.session_id, s.customer_id, c.name AS customer_name,
       s.pc_id, p.pc_name, s.start_time, s.end_time, s.total_cost,
@@ -19,6 +23,9 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const auth = await requireApiRole(["admin", "staff"]);
+  if (auth.response) return auth.response;
+
   const body = await request.json().catch(() => null);
   const customerId = Number(body?.customerId);
   const pcId = Number(body?.pcId);
@@ -48,6 +55,9 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
+  const auth = await requireApiRole(["admin", "staff"]);
+  if (auth.response) return auth.response;
+
   const body = await request.json().catch(() => null);
   const sessionId = Number(body?.sessionId);
   if (!Number.isInteger(sessionId)) return NextResponse.json({ error: "Valid session ID required." }, { status: 400 });
