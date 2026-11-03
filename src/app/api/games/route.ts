@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query, errorMessage } from "@/lib/db";
+import { requireApiRole } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  const auth = await requireApiRole(["admin", "staff", "customer"]);
+  if (auth.response) return auth.response;
+
   try {
     const result = await query(`SELECT g.game_id, g.title, g.description, c.category_name
       FROM games g LEFT JOIN game_categories c ON c.category_id = g.category_id
@@ -16,6 +20,9 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const auth = await requireApiRole(["admin", "staff"]);
+  if (auth.response) return auth.response;
+
   const body = await request.json().catch(() => null);
   const title = String(body?.title ?? "").trim();
   const categoryId = body?.categoryId ? Number(body.categoryId) : null;

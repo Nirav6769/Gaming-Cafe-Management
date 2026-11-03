@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query, errorMessage } from "@/lib/db";
+import { requireApiRole } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
+  const auth = await requireApiRole(["admin", "staff"]);
+  if (auth.response) return auth.response;
+
   try {
     const search = request.nextUrl.searchParams.get("search")?.trim() ?? "";
     const result = await query(`SELECT customer_id, name, email, phone, join_date
@@ -17,11 +21,14 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const auth = await requireApiRole(["admin", "staff"]);
+  if (auth.response) return auth.response;
+
   const body = await request.json().catch(() => null);
   const name = String(body?.name ?? "").trim();
   const email = String(body?.email ?? "").trim().toLowerCase();
   const phone = String(body?.phone ?? "").trim() || null;
-  if (!name || name.length > 100 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 100) {
+  if (!name || name.length > 100 || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) || email.length > 100) {
     return NextResponse.json({ error: "Enter a name and valid email address." }, { status: 400 });
   }
   try {

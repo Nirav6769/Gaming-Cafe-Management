@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import SignOutButton from "@/components/sign-out-button";
 
 type PC = { pc_id:number; pc_name:string; status:string; hourly_rate:string; session_id:number|null; start_time:string|null; customer_name:string|null };
 type Customer = { customer_id:number; name:string; email:string; phone:string|null; join_date:string };
@@ -92,7 +93,7 @@ export default function Home() {
       <div className="sidebar-bottom"><span className="live-dot"/> SYSTEM ONLINE<small>Gaming Cafe · Admin</small></div>
     </aside>
     <section className="main-area">
-      <header className="topbar"><div><span className="eyebrow">MANAGEMENT CONSOLE</span><h1>{tab}</h1></div><button className="refresh-btn" onClick={()=>refresh().catch(e=>setError(e.message))}>↻ Refresh</button></header>
+      <header className="topbar"><div><span className="eyebrow">MANAGEMENT CONSOLE</span><h1>{tab}</h1></div><div className="flex items-center gap-2"><button className="refresh-btn" onClick={()=>refresh().catch(e=>setError(e.message))}>↻ Refresh</button><SignOutButton /></div></header>
       {error && <div className="alert error">{error}</div>}{notice && <div className="alert success">{notice}</div>}
       {!dashboard && !error ? <div className="loading">Connecting to your cafe database…</div> : <>
       {tab==="Overview" && <div className="content">
