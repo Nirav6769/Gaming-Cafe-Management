@@ -43,7 +43,40 @@ export default function Home() {
     setDashboard(d); setPcs(p); setCustomers(c); setSessions(s); setGames(g.games); setCategories(g.categories);
   },[customerSearch]);
 
-  useEffect(() => { refresh().catch(e => setError(e.message)); },[refresh]);
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      try {
+        const [d, p, c, s, g] = await Promise.all([
+          api<Dashboard>("/api/dashboard"),
+          api<PC[]>("/api/pcs"),
+          api<Customer[]>(`/api/customers?search=${encodeURIComponent(customerSearch)}`),
+          api<Session[]>("/api/sessions"),
+          api<{ games: Game[]; categories: Category[] }>("/api/games")
+        ]);
+
+        if (cancelled) return;
+
+        setDashboard(d);
+        setPcs(p);
+        setCustomers(c);
+        setSessions(s);
+        setGames(g.games);
+        setCategories(g.categories);
+      } catch (error) {
+        if (!cancelled) {
+          setError(error instanceof Error ? error.message : "Something went wrong");
+        }
+      }
+    }
+
+    void load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [customerSearch]);
   async function run(action:()=>Promise<unknown>, success:string) {
     setBusy(true); setError(""); setNotice("");
     try { await action(); await refresh(); setNotice(success); }
