@@ -144,4 +144,4 @@ ALTER TABLE public.gaming_sessions ADD CONSTRAINT gaming_sessions_pc_id_fkey
 
 ALTER TABLE public.reservations ENABLE ROW LEVEL SECURITY;
 REVOKE ALL PRIVILEGES ON TABLE public.reservations FROM anon, authenticated;
-REVOKE ALL PRIVILEGES ON SEQUENCE public.reservations_reservation_id_seq FROM anon, authenticated;
+REVOKE ALL PRIVILEGES ON SEQUENCE public.reservations_reservation_id_seq, public.maintenance_records_maintenance_id_seq FROM anon, authenticated;
