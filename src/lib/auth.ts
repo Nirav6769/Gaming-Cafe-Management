@@ -4,14 +4,16 @@ import { NextResponse } from "next/server";
 import { redirect } from "next/navigation";
 import { query } from "@/lib/db";
 import { createClient } from "@/lib/supabase/server";
+import {
+  decideProfileAccess,
+  isValidProfileMapping,
+  type AppRole,
+  type ProfileMapping,
+} from "@/lib/auth-policy";
 
-export type AppRole = "admin" | "staff" | "customer";
+export type { AppRole } from "@/lib/auth-policy";
 
-export type UserProfile = {
-  authUserId: string;
-  role: AppRole;
-  staffId: number | null;
-  customerId: number | null;
+export type UserProfile = ProfileMapping & {
   email: string | null;
 };
 
@@ -34,11 +36,17 @@ async function profileForUser(userId: string, email: string | undefined) {
   const row = result.rows[0];
   if (!row) return null;
 
-  return {
+  const mapping: ProfileMapping = {
     authUserId: row.auth_user_id,
     role: row.role,
     staffId: row.staff_id,
     customerId: row.customer_id,
+  };
+
+  if (!isValidProfileMapping(mapping)) return null;
+
+  return {
+    ...mapping,
     email: email ?? null,
   } satisfies UserProfile;
 }
@@ -61,7 +69,13 @@ export async function requireApiRole(
   const supabase = await createClient();
   const { data, error } = await supabase.auth.getUser();
 
-  if (error || !data.user) {
+  const identity = !error && data.user ? { id: data.user.id } : null;
+  const profile = identity
+    ? await profileForUser(identity.id, data.user?.email)
+    : null;
+  const decision = decideProfileAccess(identity, profile, allowedRoles);
+
+  if (decision.kind === "unauthenticated") {
     return {
       response: NextResponse.json(
         { error: "Authentication required." },
@@ -70,17 +84,16 @@ export async function requireApiRole(
     };
   }
 
-  const profile = await profileForUser(data.user.id, data.user.email);
-  if (!profile) {
+  if (decision.kind === "missing-profile") {
     return {
       response: NextResponse.json(
-        { error: "Your account is not linked to a café profile. Contact an administrator." },
+        { error: "Your account is not linked to a valid café profile. Contact an administrator." },
         { status: 403 },
       ),
     };
   }
 
-  if (!allowedRoles.includes(profile.role)) {
+  if (decision.kind === "forbidden") {
     return {
       response: NextResponse.json(
         { error: "You do not have permission to perform this action." },
@@ -89,7 +102,12 @@ export async function requireApiRole(
     };
   }
 
-  return { profile };
+  return {
+    profile: {
+      ...decision.profile,
+      email: data.user?.email ?? null,
+    },
+  };
 }
 
 export async function requirePageRole(allowedRoles: AppRole[]) {
