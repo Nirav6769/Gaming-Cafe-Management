@@ -41,7 +41,7 @@ ALTER TABLE public.maintenance_records
 
 -- Preserve the original weak-entity uniqueness from schema.sql even though
 -- maintenance_id is now the row identifier used by the Operations API.
-DO $
+DO $$
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint
@@ -51,7 +51,7 @@ BEGIN
     ALTER TABLE public.maintenance_records
       ADD CONSTRAINT maintenance_records_pc_date_unique UNIQUE (pc_id, maintenance_date);
   END IF;
-END $;
+END $$;
 ALTER TABLE public.maintenance_records
   ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMP;
 UPDATE public.maintenance_records SET resolved_at = CURRENT_TIMESTAMP WHERE resolved = TRUE AND resolved_at IS NULL;
