@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
     const result=await pool.query(`INSERT INTO reservations(customer_id,pc_id,start_time,end_time,notes,created_by_staff_id)
       VALUES($1,$2,$3,$4,$5,$6)
       RETURNING reservation_id,customer_id,pc_id,start_time,end_time,status,notes`,
-      [customerId,pcId,startTime.toISOString(),endTime.toISOString(),String(body?.notes??"").trim()||null,auth.profile.staffId]);
+      [customerId,pcId,String(body.startTime).replace("T"," "),String(body.endTime).replace("T"," "),String(body?.notes??"").trim()||null,auth.profile.staffId]);
     return NextResponse.json(result.rows[0],{status:201});
   } catch(error) {
     const message=errorMessage(error);
