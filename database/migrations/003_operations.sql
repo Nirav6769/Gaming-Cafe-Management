@@ -59,7 +59,7 @@ BEGIN
     SELECT 1 FROM public.gaming_sessions s
     WHERE s.pc_id = NEW.pc_id
       AND s.start_time < NEW.end_time
-      AND COALESCE(s.end_time, 'infinity'::timestamp) > NEW.start_time
+      AND COALESCE(s.end_time, s.expected_end_time, 'infinity'::timestamp) > NEW.start_time
   ) THEN
     RAISE EXCEPTION 'Reservation overlaps an existing gaming session' USING ERRCODE = '23P01';
   END IF;
@@ -67,7 +67,7 @@ BEGIN
 END $$;
 DROP TRIGGER IF EXISTS reservations_guard_conflict ON public.reservations;
 CREATE TRIGGER reservations_guard_conflict
-BEFORE INSERT OR UPDATE OF pc_id,start_time,end_time,status ON public.reservations
+BEFORE INSERT OR UPDATE ON public.reservations
 FOR EACH ROW EXECUTE FUNCTION public.operations_guard_reservation();
 
 CREATE OR REPLACE FUNCTION public.operations_guard_session_reservation()
@@ -76,7 +76,7 @@ DECLARE
   finish_at TIMESTAMP;
 BEGIN
   PERFORM 1 FROM public.gaming_pcs WHERE pc_id = NEW.pc_id FOR UPDATE;
-  finish_at := COALESCE(NEW.expected_end_time, NEW.end_time, 'infinity'::timestamp);
+  finish_at := COALESCE(NEW.end_time, NEW.expected_end_time, 'infinity'::timestamp);
   IF EXISTS (
     SELECT 1 FROM public.reservations r
     WHERE r.pc_id = NEW.pc_id AND r.status = 'confirmed'
@@ -90,7 +90,7 @@ BEGIN
 END $$;
 DROP TRIGGER IF EXISTS sessions_guard_reservation ON public.gaming_sessions;
 CREATE TRIGGER sessions_guard_reservation
-BEFORE INSERT OR UPDATE OF pc_id,start_time,end_time,expected_end_time,reservation_id ON public.gaming_sessions
+BEFORE INSERT OR UPDATE ON public.gaming_sessions
 FOR EACH ROW EXECUTE FUNCTION public.operations_guard_session_reservation();
 
 CREATE OR REPLACE FUNCTION public.operations_set_session_billing()
@@ -108,7 +108,7 @@ BEGIN
 END $$;
 DROP TRIGGER IF EXISTS sessions_calculate_billing ON public.gaming_sessions;
 CREATE TRIGGER sessions_calculate_billing
-BEFORE INSERT OR UPDATE OF end_time ON public.gaming_sessions
+BEFORE INSERT OR UPDATE ON public.gaming_sessions
 FOR EACH ROW EXECUTE FUNCTION public.operations_set_session_billing();
 
 CREATE OR REPLACE FUNCTION public.operations_stamp_maintenance()
@@ -149,7 +149,10 @@ CREATE TRIGGER sessions_sync_pc_status
 AFTER INSERT OR UPDATE OR DELETE ON public.gaming_sessions
 FOR EACH ROW EXECUTE FUNCTION public.operations_sync_pc_status();
 
--- Preserve operational history: deleting a customer or PC must not erase sessions.
+-- Preserve operational history: deleting a customer or PC must not erase sessions or maintenance records.
+ALTER TABLE public.maintenance_records DROP CONSTRAINT IF EXISTS maintenance_records_pc_id_fkey;
+ALTER TABLE public.maintenance_records ADD CONSTRAINT maintenance_records_pc_id_fkey
+  FOREIGN KEY (pc_id) REFERENCES public.gaming_pcs(pc_id) ON DELETE RESTRICT;
 ALTER TABLE public.gaming_sessions DROP CONSTRAINT IF EXISTS gaming_sessions_customer_id_fkey;
 ALTER TABLE public.gaming_sessions ADD CONSTRAINT gaming_sessions_customer_id_fkey
   FOREIGN KEY (customer_id) REFERENCES public.customers(customer_id) ON DELETE RESTRICT;
