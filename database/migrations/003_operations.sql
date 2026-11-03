@@ -66,8 +66,12 @@ BEGIN
   RETURN NEW;
 END $$;
 DROP TRIGGER IF EXISTS reservations_guard_conflict ON public.reservations;
+DROP TRIGGER IF EXISTS reservations_guard_conflict_update ON public.reservations;
 CREATE TRIGGER reservations_guard_conflict
-BEFORE INSERT OR UPDATE ON public.reservations
+BEFORE INSERT ON public.reservations
+FOR EACH ROW EXECUTE FUNCTION public.operations_guard_reservation();
+CREATE TRIGGER reservations_guard_conflict_update
+BEFORE UPDATE OF pc_id,start_time,end_time,status ON public.reservations
 FOR EACH ROW EXECUTE FUNCTION public.operations_guard_reservation();
 
 CREATE OR REPLACE FUNCTION public.operations_guard_session_reservation()
@@ -89,8 +93,12 @@ BEGIN
   RETURN NEW;
 END $$;
 DROP TRIGGER IF EXISTS sessions_guard_reservation ON public.gaming_sessions;
+DROP TRIGGER IF EXISTS sessions_guard_reservation_update ON public.gaming_sessions;
 CREATE TRIGGER sessions_guard_reservation
-BEFORE INSERT OR UPDATE ON public.gaming_sessions
+BEFORE INSERT ON public.gaming_sessions
+FOR EACH ROW EXECUTE FUNCTION public.operations_guard_session_reservation();
+CREATE TRIGGER sessions_guard_reservation_update
+BEFORE UPDATE OF pc_id,start_time,expected_end_time,reservation_id ON public.gaming_sessions
 FOR EACH ROW EXECUTE FUNCTION public.operations_guard_session_reservation();
 
 CREATE OR REPLACE FUNCTION public.operations_set_session_billing()
@@ -107,8 +115,12 @@ BEGIN
   RETURN NEW;
 END $$;
 DROP TRIGGER IF EXISTS sessions_calculate_billing ON public.gaming_sessions;
+DROP TRIGGER IF EXISTS sessions_calculate_billing_update ON public.gaming_sessions;
 CREATE TRIGGER sessions_calculate_billing
-BEFORE INSERT OR UPDATE ON public.gaming_sessions
+BEFORE INSERT ON public.gaming_sessions
+FOR EACH ROW EXECUTE FUNCTION public.operations_set_session_billing();
+CREATE TRIGGER sessions_calculate_billing_update
+BEFORE UPDATE OF end_time ON public.gaming_sessions
 FOR EACH ROW EXECUTE FUNCTION public.operations_set_session_billing();
 
 CREATE OR REPLACE FUNCTION public.operations_stamp_maintenance()
