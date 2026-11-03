@@ -13,6 +13,7 @@ export async function PATCH(_request:Request,{params}:Context){
   if(!locked.rowCount){await client.query("ROLLBACK");return NextResponse.json({error:"Active session not found."},{status:404});}
   const result=await client.query(`UPDATE gaming_sessions SET end_time=CURRENT_TIMESTAMP
     WHERE session_id=$1 RETURNING session_id,pc_id,start_time,end_time,total_cost,hourly_rate_snapshot`,[id]);
+  await client.query("UPDATE reservations SET status='completed' WHERE reservation_id=(SELECT reservation_id FROM gaming_sessions WHERE session_id=$1) AND status='confirmed'",[id]);
   await client.query("COMMIT");
   return NextResponse.json(result.rows[0]);
  }catch(error){
