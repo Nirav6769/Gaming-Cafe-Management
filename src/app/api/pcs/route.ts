@@ -5,9 +5,13 @@ import { requireApiRole } from "@/lib/auth";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const auth = await requireApiRole(["admin", "staff"]);
+  const auth = await requireApiRole(["admin", "staff", "customer"]);
   if (auth.response) return auth.response;
   try {
+    if (auth.profile.role === "customer") {
+      const result = await query("SELECT pc_id,pc_name,status FROM gaming_pcs ORDER BY pc_id");
+      return NextResponse.json(result.rows);
+    }
     const result = await query(`SELECT p.pc_id,p.pc_name,p.status,p.hourly_rate,
       s.session_id,s.start_time,c.name AS customer_name
       FROM gaming_pcs p LEFT JOIN gaming_sessions s ON s.pc_id=p.pc_id AND s.end_time IS NULL
