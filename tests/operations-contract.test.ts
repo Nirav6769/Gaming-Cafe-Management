@@ -21,4 +21,5 @@ test("operations migration synchronizes PC state and timestamps resolved mainten
  assert.match(sql,/operations_sync_pc_status/);
  assert.match(sql,/operations_stamp_maintenance/);
  assert.match(sql,/maintenance_id BIGSERIAL/);
+ assert.doesNotMatch(sql,/LANGUAGE plpgsql AS \$(?!\$)/);
 });
