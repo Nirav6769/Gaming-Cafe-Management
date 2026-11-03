@@ -124,7 +124,7 @@ BEFORE UPDATE OF end_time ON public.gaming_sessions
 FOR EACH ROW EXECUTE FUNCTION public.operations_set_session_billing();
 
 CREATE OR REPLACE FUNCTION public.operations_stamp_maintenance()
-RETURNS trigger LANGUAGE plpgsql AS $
+RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   IF NEW.resolved = TRUE AND (TG_OP = 'INSERT' OR OLD.resolved = FALSE) THEN
     NEW.resolved_at := COALESCE(NEW.resolved_at, CURRENT_TIMESTAMP);
@@ -132,7 +132,7 @@ BEGIN
     NEW.resolved_at := NULL;
   END IF;
   RETURN NEW;
-END $;
+END $$;
 DROP TRIGGER IF EXISTS maintenance_stamp_resolved ON public.maintenance_records;
 CREATE TRIGGER maintenance_stamp_resolved
 BEFORE INSERT OR UPDATE ON public.maintenance_records
