@@ -60,7 +60,6 @@ BEGIN
     WHERE s.pc_id = NEW.pc_id
       AND s.start_time < NEW.end_time
       AND COALESCE(s.end_time, 'infinity'::timestamp) > NEW.start_time
-      AND (TG_OP = 'INSERT' OR s.session_id <> COALESCE(NEW.reservation_id, -1))
   ) THEN
     RAISE EXCEPTION 'Reservation overlaps an existing gaming session' USING ERRCODE = '23P01';
   END IF;
@@ -116,7 +115,7 @@ CREATE OR REPLACE FUNCTION public.operations_sync_pc_status()
 RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE target_pc INTEGER;
 BEGIN
-  target_pc := COALESCE(NEW.pc_id, OLD.pc_id);
+  IF TG_OP = 'DELETE' THEN target_pc := OLD.pc_id; ELSE target_pc := NEW.pc_id; END IF;
   UPDATE public.gaming_pcs p
   SET status = CASE
     WHEN EXISTS (SELECT 1 FROM public.maintenance_records m WHERE m.pc_id=target_pc AND m.resolved=FALSE) THEN 'maintenance'
@@ -124,15 +123,15 @@ BEGIN
     ELSE 'available'
   END
   WHERE p.pc_id=target_pc;
-  RETURN COALESCE(NEW, OLD);
+  IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
 END $$;
 DROP TRIGGER IF EXISTS maintenance_sync_pc_status ON public.maintenance_records;
 CREATE TRIGGER maintenance_sync_pc_status
-AFTER INSERT OR UPDATE OF resolved OR DELETE ON public.maintenance_records
+AFTER INSERT OR UPDATE OR DELETE ON public.maintenance_records
 FOR EACH ROW EXECUTE FUNCTION public.operations_sync_pc_status();
 DROP TRIGGER IF EXISTS sessions_sync_pc_status ON public.gaming_sessions;
 CREATE TRIGGER sessions_sync_pc_status
-AFTER INSERT OR UPDATE OF end_time OR DELETE ON public.gaming_sessions
+AFTER INSERT OR UPDATE OR DELETE ON public.gaming_sessions
 FOR EACH ROW EXECUTE FUNCTION public.operations_sync_pc_status();
 
 -- Preserve operational history: deleting a customer or PC must not erase sessions.
