@@ -111,6 +111,21 @@ CREATE TRIGGER sessions_calculate_billing
 BEFORE INSERT OR UPDATE OF end_time ON public.gaming_sessions
 FOR EACH ROW EXECUTE FUNCTION public.operations_set_session_billing();
 
+CREATE OR REPLACE FUNCTION public.operations_stamp_maintenance()
+RETURNS trigger LANGUAGE plpgsql AS $
+BEGIN
+  IF NEW.resolved = TRUE AND (TG_OP = 'INSERT' OR OLD.resolved = FALSE) THEN
+    NEW.resolved_at := COALESCE(NEW.resolved_at, CURRENT_TIMESTAMP);
+  ELSIF NEW.resolved = FALSE THEN
+    NEW.resolved_at := NULL;
+  END IF;
+  RETURN NEW;
+END $;
+DROP TRIGGER IF EXISTS maintenance_stamp_resolved ON public.maintenance_records;
+CREATE TRIGGER maintenance_stamp_resolved
+BEFORE INSERT OR UPDATE ON public.maintenance_records
+FOR EACH ROW EXECUTE FUNCTION public.operations_stamp_maintenance();
+
 CREATE OR REPLACE FUNCTION public.operations_sync_pc_status()
 RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE target_pc INTEGER;
