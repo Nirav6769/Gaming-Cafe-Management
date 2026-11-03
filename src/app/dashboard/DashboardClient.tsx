@@ -90,6 +90,7 @@ export default function Home() {
       <div className="brand"><div className="brand-mark">GC</div><div><strong>GAMEHUB</strong><small>CAFE MANAGEMENT</small></div></div>
       <div className="side-label">WORKSPACE</div>
       {["Overview","PC Management","Customers","Sessions","Games"].map(item=><button key={item} className={tab===item?"nav-item active":"nav-item"} onClick={()=>setTab(item)}><span>{({Overview:"▦","PC Management":"▣",Customers:"♙",Sessions:"◷",Games:"▤"} as Record<string,string>)[item]}</span>{item}</button>)}
+      <a className="nav-item" href="/operations"><span>⚙</span>Operations</a>
       <div className="sidebar-bottom"><span className="live-dot"/> SYSTEM ONLINE<small>Gaming Cafe · Admin</small></div>
     </aside>
     <section className="main-area">
