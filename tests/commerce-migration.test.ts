@@ -155,7 +155,7 @@ test(
       await client.query(
         `INSERT INTO public.order_items
            (order_id, snack_id, quantity, item_name_snapshot, unit_price, line_total)
-         VALUES ($1, $2, 3, '', 0, 0)`,
+         VALUES ($1, $2, 9, '', 0, 0)`,
         [fullOrderId, snackId],
       );
       await client.query("SAVEPOINT insufficient_stock");
