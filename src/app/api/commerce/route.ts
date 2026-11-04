@@ -14,7 +14,7 @@ export async function GET() {
   const canManage = auth.profile.role !== "customer";
 
   try {
-    const [plans, snacks, memberships, orders] = await Promise.all([
+    const [plans, snacks, memberships, orders, customers] = await Promise.all([
       query(
         `SELECT plan_id, name, description, duration_days, price,
                 discount_percent, is_active
@@ -84,6 +84,14 @@ export async function GET() {
          LIMIT 100`,
         [customerId],
       ),
+      query(
+        `SELECT customer_id, name, email
+         FROM public.customers
+         WHERE $1::BOOLEAN = TRUE
+         ORDER BY name
+         LIMIT 500`,
+        [canManage],
+      ),
     ]);
 
     return NextResponse.json({
@@ -93,6 +101,7 @@ export async function GET() {
       snacks: snacks.rows,
       memberships: memberships.rows,
       orders: orders.rows,
+      customers: customers.rows,
     });
   } catch (error) {
     return NextResponse.json({ error: errorMessage(error) }, { status: 500 });

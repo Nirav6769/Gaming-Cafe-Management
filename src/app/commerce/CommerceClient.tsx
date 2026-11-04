@@ -32,9 +32,11 @@ type Order = {
   created_at: string; placed_at: string | null; fulfilled_at: string | null;
   items: OrderItem[]; latest_payment: Payment | null;
 };
+type Customer = { customer_id: number; name: string; email: string };
 type Overview = {
   role: Role; customerId: number | null;
   plans: Plan[]; snacks: Snack[]; memberships: Membership[]; orders: Order[];
+  customers: Customer[];
 };
 
 async function api<T>(url: string, options?: RequestInit): Promise<T> {
@@ -137,9 +139,9 @@ export default function CommerceClient({
           <div><strong>GAMEHUB</strong><small>CAFE MANAGEMENT</small></div>
         </div>
         <div className="side-label">WORKSPACE</div>
-        <Link className="nav-item" href="/dashboard"><span>▦</span>Dashboard</Link>
+        {canManage && <Link className="nav-item" href="/dashboard"><span>▦</span>Dashboard</Link>}
         <Link className="nav-item active" href="/commerce"><span>₹</span>Commerce</Link>
-        <Link className="nav-item" href="/operations"><span>⚙</span>Operations</Link>
+        {canManage && <Link className="nav-item" href="/operations"><span>⚙</span>Operations</Link>}
         <div className="sidebar-bottom">
           <span className="live-dot" /> SYSTEM ONLINE
           <small>{role.toUpperCase()} ACCOUNT</small>
@@ -208,7 +210,7 @@ export default function CommerceClient({
                   <small>{plan.description || "Gaming café membership"}</small>
                   <small>{plan.duration_days} days · {money(plan.price)}</small>
                   <small>{Number(plan.discount_percent)}% snack discount</small>
-                  {plan.is_active && <button className="primary-btn mt-3" disabled={busy} onClick={() => {
+                  {plan.is_active && <button className="primary-btn mt-3" disabled={busy || (canManage && !targetCustomerId)} onClick={() => {
                     void run(() => api("/api/commerce/memberships", {
                       method: "POST",
                       body: JSON.stringify({
@@ -286,8 +288,15 @@ export default function CommerceClient({
             </div>
             {canManage && (
               <div className="table-tools">
-                <label htmlFor="commerce-customer">Customer ID</label>
-                <input id="commerce-customer" type="number" min="1" placeholder="Enter customer ID" value={targetCustomerId} onChange={(event) => setTargetCustomerId(event.target.value)} />
+                <label htmlFor="commerce-customer">Customer</label>
+                <select id="commerce-customer" required value={targetCustomerId} onChange={(event) => setTargetCustomerId(event.target.value)}>
+                  <option value="">Choose customer</option>
+                  {data.customers.map((customer) => (
+                    <option key={customer.customer_id} value={customer.customer_id}>
+                      {customer.name} · {customer.email} · #{customer.customer_id}
+                    </option>
+                  ))}
+                </select>
               </div>
             )}
             <div className="table-wrap">
@@ -316,7 +325,7 @@ export default function CommerceClient({
             </div>
             <div className="panel mt-3 grid gap-3 p-4">
               <input maxLength={500} placeholder="Order note (optional)" value={orderNotes} onChange={(event) => setOrderNotes(event.target.value)} />
-              <button className="primary-btn w-fit" disabled={busy} onClick={() => void createOrder()}>Create draft order</button>
+              <button className="primary-btn w-fit" disabled={busy || (canManage && !targetCustomerId)} onClick={() => void createOrder()}>Create draft order</button>
               <small className="muted">Prices and membership discounts are calculated and snapshotted by PostgreSQL. Stock is deducted only when the order is placed.</small>
             </div>
 
