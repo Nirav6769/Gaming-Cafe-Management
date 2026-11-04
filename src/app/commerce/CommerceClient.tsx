@@ -108,7 +108,7 @@ export default function CommerceClient({role,customerId}:{role:Role;customerId:n
           <form className="panel form-grid" onSubmit={e=>{e.preventDefault();if(customerId)void run(()=>api(`/api/commerce/customers/${customerId}`,{method:"PATCH",body:JSON.stringify(customerForm)}),"Your profile was updated.");}}>
             <h3>Update your profile</h3>
             <input required maxLength={100} placeholder="Full name" value={customerForm.name} onChange={e=>setCustomerForm({...customerForm,name:e.target.value})}/>
-            <input required type="email" maxLength={100} placeholder="Email address" value={customerForm.email} onChange={e=>setCustomerForm({...customerForm,email:e.target.value})}/>
+            <input type="email" maxLength={100} placeholder="Email address (managed by your login account)" value={customerForm.email} disabled readOnly/>
             <input maxLength={15} placeholder="Phone (optional)" value={customerForm.phone} onChange={e=>setCustomerForm({...customerForm,phone:e.target.value})}/>
             <button className="primary-btn" disabled={busy||!customerId}>Save profile</button>
           </form></>}

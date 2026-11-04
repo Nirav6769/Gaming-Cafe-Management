@@ -23,17 +23,20 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
   const body = await request.json().catch(() => null);
   const name = String(body?.name ?? "").trim();
-  const email = String(body?.email ?? "").trim().toLowerCase();
+  const email = auth.profile.role === "customer"
+    ? null
+    : String(body?.email ?? "").trim().toLowerCase();
   const phone = String(body?.phone ?? "").trim() || null;
-  if (!name || name.length > 100 || !isValidCustomerEmail(email) ||
-      email.length > 100 || (phone && phone.length > 15)) {
-    return NextResponse.json({ error: "Enter a name, valid email and phone number up to 15 characters." }, { status: 400 });
+  if (!name || name.length > 100 ||
+      (email !== null && (!isValidCustomerEmail(email) || email.length > 100)) ||
+      (phone && phone.length > 15)) {
+    return NextResponse.json({ error: "Enter a valid name, email (staff/admin only) and phone number up to 15 characters." }, { status: 400 });
   }
 
   try {
     const result = await query(
       `UPDATE public.customers
-       SET name = $1, email = $2, phone = $3
+       SET name = $1, email = COALESCE($2, email), phone = $3
        WHERE customer_id = $4
        RETURNING customer_id, name, email, phone, join_date, updated_at`,
       [name, email, phone, customerId],
