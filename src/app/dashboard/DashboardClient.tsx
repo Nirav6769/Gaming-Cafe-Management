@@ -91,7 +91,7 @@ export default function Home() {
       {["Overview","PC Management","Sessions","Games"].map(item=><button key={item} className={tab===item?"nav-item active":"nav-item"} onClick={()=>setTab(item)}><span>{({Overview:"▦","PC Management":"▣",Sessions:"◷",Games:"▤"} as Record<string,string>)[item]}</span>{item}</button>)}
       <Link className="nav-item" href="/operations"><span>⚙</span>Operations</Link>
       <Link className="nav-item" href="/commerce"><span>₹</span>Commerce</Link>
-      <div className="sidebar-bottom"><span className="live-dot"/> SYSTEM ONLINE<small>Gaming Cafe · Admin</small></div>
+      <div className="sidebar-bottom"><span className="live-dot"/> SYSTEM ONLINE<small>Gaming Cafe · Team</small></div>
     </aside>
     <section className="main-area">
       <header className="topbar"><div><span className="eyebrow">MANAGEMENT CONSOLE</span><h1>{tab}</h1></div><div className="flex items-center gap-2"><button className="refresh-btn" onClick={()=>refresh().catch(e=>setError(e.message))}>↻ Refresh</button><SignOutButton /></div></header>

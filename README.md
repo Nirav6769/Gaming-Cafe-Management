@@ -9,7 +9,7 @@ A role-aware gaming-cafe management app built with Next.js, TypeScript, PostgreS
 - Membership plans, membership history and membership discounts
 - Snack catalogue, stock management, orders and demo payment/refund records
 - PC availability, reservations, gaming sessions and maintenance
-- Game catalogue and session analytics (see the integrated Games/Analytics module)
+- Game catalogue (advanced analytics and semantic search workstream pending integration)
 
 ## Requirements
 - Node.js 20.9+
