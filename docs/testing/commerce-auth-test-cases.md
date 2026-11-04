@@ -33,7 +33,7 @@
 
 1. Sign in as Admin; create a plan, customer and snack; assign a membership; create an order; record cash/demo payment; confirm stock falls exactly once; refund it and confirm stock does not rise.
 2. Sign in as Staff; manage snack price/stock, assign a membership, create an order and record payment/refund. Confirm plan creation is forbidden.
-3. Sign in as Customer A; edit name/phone, view only their own membership/order history, create and cancel a pending order. Confirm customer B's ID cannot be used to read/update customer B.
+3. Sign in as Customer A; edit name/phone, view only their own membership/order history, create and cancel a pending order. Confirm customer B's ID cannot be used to read/update customer B. Confirm the login email is read-only in Commerce.
 4. Sign out; replay the old protected API request/cookies and confirm the request is rejected.
 5. With only the Supabase publishable key, attempt REST reads/writes against the commerce tables/views and confirm access is denied.
 

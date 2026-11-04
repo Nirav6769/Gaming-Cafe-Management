@@ -61,6 +61,7 @@ The UUIDs and IDs above are placeholders/examples; replace them with the intende
 - `requirePageRole(allowedRoles)` redirects unauthenticated users to `/login` and a wrong-role user to `/forbidden`.
 - The authoritative role is `user_profiles.role`. Never accept a role from browser state or Supabase user metadata.
 - For customer-owned APIs use `auth.profile.customerId` in the SQL filter. Only admin/staff may submit a customer ID to act on behalf of a customer.
+- Commerce profile PATCH updates name and phone only. The customer email field is read-only in the UI and cannot be changed through this API, because the corresponding Supabase Auth email must remain aligned.
 
 Example:
 

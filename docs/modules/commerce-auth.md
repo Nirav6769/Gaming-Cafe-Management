@@ -18,7 +18,7 @@ A browser-supplied `role` or customer ID never changes the authenticated user's 
 |---|---|
 | customer_id | Existing integer primary key |
 | name | Customer display name |
-| email | Login/contact email; for linked users the login identity remains owned by Supabase Auth |
+| email | Login/contact email; managed by Supabase Auth for linked users and immutable through the Commerce profile PATCH API |
 | phone | Optional phone (maximum 15 characters) |
 | join_date | Existing customer creation timestamp |
 | updated_at | Added by Commerce migration; refreshed by a before-update trigger |
@@ -83,7 +83,7 @@ New Commerce tables have RLS enabled without client Data API policies; direct `a
 
 ## API map
 
-See `docs/COMMERCE.md` for the route table and role matrix. API routes are parameterised and validate IDs, names, email, phone, price, duration, discount, stock, quantity, status and ownership. Payments are created/marked paid/refunded only by admin/staff.
+See `docs/COMMERCE.md` for the route table and role matrix. API routes are parameterised and validate IDs, names, email at customer creation, phone, price, duration, discount, stock, quantity, status and ownership. Profile updates change name/phone only; Auth email is not changed by this module. Payments are created/marked paid/refunded only by admin/staff.
 
 ## Important business rules
 

@@ -24,7 +24,7 @@ Commerce and Operations both depend on the baseline and Auth foundation, but are
 | `vw_active_customer_memberships` | Current valid memberships | Includes customer, plan, dates, discount and membership payment method |
 | `vw_snack_sales_summary` | Snack unit and sales summary | Aggregates paid/refunded order lines |
 
-The migration adds `customers.updated_at` with a guarded `ALTER TABLE` and a trigger that refreshes it on customer updates. Login email remains managed by Supabase Auth; customer profile edits are limited to name and phone so the café email cannot drift from the verified login identity.
+The migration adds `customers.updated_at` with a guarded `ALTER TABLE` and a trigger that refreshes it on customer updates. Login email remains managed by Supabase Auth; customer profile edits are limited to name and phone so the café email cannot drift from the verified login identity. The PATCH endpoint ignores submitted email changes for every role; update Auth email through a separate verified Supabase Auth flow if that is ever added.
 
 ## Membership rules
 
