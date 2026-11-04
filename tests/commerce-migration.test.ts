@@ -190,7 +190,7 @@ test(
         "UPDATE public.order_items SET quantity = 3 WHERE order_id = $1 AND snack_id = $2",
         [draftId, chipsId],
       );
-      let item = await client.query(
+      const item = await client.query(
         "SELECT item_name_snapshot, quantity, unit_price_at_purchase, line_total FROM public.order_items WHERE order_id = $1 AND snack_id = $2",
         [draftId, chipsId],
       );
