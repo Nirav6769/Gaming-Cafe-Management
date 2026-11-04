@@ -27,10 +27,8 @@ export default function Home() {
   const [customers,setCustomers] = useState<Customer[]>([]);
   const [sessions,setSessions] = useState<Session[]>([]);
   const [games,setGames] = useState<Game[]>([]);
-  const [categories,setCategories] = useState<Category[]>([]);
   const [notice,setNotice] = useState("");
   const [error,setError] = useState("");
-  const [gameForm,setGameForm] = useState({title:"",categoryId:"",description:""});
   const [sessionForm,setSessionForm] = useState({customerId:"",pcId:""});
   const [busy,setBusy] = useState(false);
 
@@ -40,7 +38,7 @@ export default function Home() {
       api<Customer[]>("/api/customers"),
       api<Session[]>("/api/sessions"), api<{games:Game[];categories:Category[]}>("/api/games")
     ]);
-    setDashboard(d); setPcs(p); setCustomers(c); setSessions(s); setGames(g.games); setCategories(g.categories);
+    setDashboard(d); setPcs(p); setCustomers(c); setSessions(s); setGames(g.games);
   },[]);
 
   useEffect(() => {
@@ -63,7 +61,6 @@ export default function Home() {
         setCustomers(c);
         setSessions(s);
         setGames(g.games);
-        setCategories(g.categories);
       } catch (error) {
         if (!cancelled) {
           setError(error instanceof Error ? error.message : "Something went wrong");
@@ -91,6 +88,8 @@ export default function Home() {
       {["Overview","PC Management","Sessions","Games"].map(item=><button key={item} className={tab===item?"nav-item active":"nav-item"} onClick={()=>setTab(item)}><span>{({Overview:"▦","PC Management":"▣",Sessions:"◷",Games:"▤"} as Record<string,string>)[item]}</span>{item}</button>)}
       <Link className="nav-item" href="/operations"><span>⚙</span>Operations</Link>
       <Link className="nav-item" href="/commerce"><span>₹</span>Commerce</Link>
+      <Link className="nav-item" href="/games"><span>🎮</span>Games & Search</Link>
+      <Link className="nav-item" href="/insights"><span>📊</span>Insights</Link>
       <div className="sidebar-bottom"><span className="live-dot"/> SYSTEM ONLINE<small>Gaming Cafe · Team</small></div>
     </aside>
     <section className="main-area">
@@ -112,7 +111,20 @@ export default function Home() {
       </div>}
       {tab==="PC Management" && <div className="content"><div className="section-heading"><div><span className="eyebrow">HARDWARE</span><h2>Manage your gaming stations</h2></div></div><div className="pc-grid">{pcs.map(pc=><div className="pc-card" key={pc.pc_id}><PCtile pc={pc}/><div className="pc-actions">{pc.status==="maintenance"?<button disabled={busy} onClick={()=>run(()=>api("/api/pcs",{method:"PATCH",body:JSON.stringify({pcId:pc.pc_id,status:"available"})}),"PC marked available.")}>Mark available</button>:pc.status==="available"?<button disabled={busy} onClick={()=>run(()=>api("/api/pcs",{method:"PATCH",body:JSON.stringify({pcId:pc.pc_id,status:"maintenance"})}),"PC moved to maintenance.")}>Set maintenance</button>:<span className="muted">End active session first</span>}</div></div>)}</div></div>}
       {tab==="Sessions" && <div className="content"><div className="section-heading"><div><span className="eyebrow">PLAYTIME & BILLING</span><h2>Gaming sessions</h2></div></div><form className="panel form-grid" onSubmit={e=>{e.preventDefault();run(async()=>{await api("/api/sessions",{method:"POST",body:JSON.stringify(sessionForm)});setSessionForm({customerId:"",pcId:""});},"Session started.");}}><h3>Start a session</h3><select required value={sessionForm.customerId} onChange={e=>setSessionForm({...sessionForm,customerId:e.target.value})}><option value="">Choose customer</option>{customers.map(c=><option key={c.customer_id} value={c.customer_id}>{c.name}</option>)}</select><select required value={sessionForm.pcId} onChange={e=>setSessionForm({...sessionForm,pcId:e.target.value})}><option value="">Choose available PC</option>{pcs.filter(p=>p.status==="available").map(p=><option key={p.pc_id} value={p.pc_id}>{p.pc_name} · {money(p.hourly_rate)}/hr</option>)}</select><button className="primary-btn" disabled={busy}>Start session</button></form><SessionTable sessions={sessions} onEnd={id=>run(()=>api("/api/sessions",{method:"PATCH",body:JSON.stringify({sessionId:id})}),"Session ended and bill calculated.")} busy={busy}/></div>}
-      {tab==="Games" && <div className="content"><div className="section-heading"><div><span className="eyebrow">GAME LIBRARY</span><h2>Games & categories</h2></div></div><form className="panel form-grid" onSubmit={e=>{e.preventDefault();run(async()=>{await api("/api/games",{method:"POST",body:JSON.stringify(gameForm)});setGameForm({title:"",categoryId:"",description:""});},"Game added.");}}><h3>Add a game</h3><input placeholder="Game title" required value={gameForm.title} onChange={e=>setGameForm({...gameForm,title:e.target.value})}/><select value={gameForm.categoryId} onChange={e=>setGameForm({...gameForm,categoryId:e.target.value})}><option value="">No category</option>{categories.map(c=><option key={c.category_id} value={c.category_id}>{c.category_name}</option>)}</select><input placeholder="Description (optional)" value={gameForm.description} onChange={e=>setGameForm({...gameForm,description:e.target.value})}/><button className="primary-btn" disabled={busy}>Add game</button></form><div className="game-grid">{games.map(g=><div className="game-card" key={g.game_id}><span className="game-symbol">▤</span><div><strong>{g.title}</strong><small>{g.category_name||"Uncategorised"}</small><p>{g.description}</p></div></div>)}</div></div>}
+      {tab==="Games" && <div className="content">
+        <div className="welcome">
+          <div>
+            <span className="eyebrow">DEDICATED WORKSPACE AVAILABLE</span>
+            <h2>Games Discovery, pgvector Search & Tournaments</h2>
+            <p>The game catalogue, natural language vector retrieval and competitive tournaments have moved to the dedicated Games workspace.</p>
+          </div>
+          <Link href="/games" className="primary-btn inline-block text-center py-3 px-6">
+            Open Games Workspace →
+          </Link>
+        </div>
+        <div className="section-heading"><div><span className="eyebrow">PREVIEW</span><h2>Games catalogue summary</h2></div></div>
+        <div className="game-grid">{games.map(g=><div className="game-card" key={g.game_id}><span className="game-symbol">▤</span><div><strong>{g.title}</strong><small>{g.category_name||"Uncategorised"}</small><p>{g.description}</p></div></div>)}</div>
+      </div>}
       </>}
     </section>
   </main>;
