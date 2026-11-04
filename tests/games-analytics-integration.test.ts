@@ -95,8 +95,8 @@ test(
 
       // Create test customers
       const c1 = await client.query("INSERT INTO customers (name, email) VALUES ('Player One', $1) RETURNING customer_id;", [`${pfx}_p1@test.com`]);
-      const c2 = await client.query("INSERT INTO customers (name, email) VALUES ('Player Two', $2) RETURNING customer_id;", [`${pfx}_p2@test.com`]);
-      const c3 = await client.query("INSERT INTO customers (name, email) VALUES ('Player Three', $3) RETURNING customer_id;", [`${pfx}_p3@test.com`]);
+      const c2 = await client.query("INSERT INTO customers (name, email) VALUES ('Player Two', $1) RETURNING customer_id;", [`${pfx}_p2@test.com`]);
+      const c3 = await client.query("INSERT INTO customers (name, email) VALUES ('Player Three', $1) RETURNING customer_id;", [`${pfx}_p3@test.com`]);
       const cust1 = c1.rows[0].customer_id as number;
       const cust2 = c2.rows[0].customer_id as number;
       const cust3 = c3.rows[0].customer_id as number;
