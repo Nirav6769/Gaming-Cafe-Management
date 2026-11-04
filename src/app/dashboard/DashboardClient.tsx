@@ -30,8 +30,6 @@ export default function Home() {
   const [categories,setCategories] = useState<Category[]>([]);
   const [notice,setNotice] = useState("");
   const [error,setError] = useState("");
-  const [customerSearch,setCustomerSearch] = useState("");
-  const [customerForm,setCustomerForm] = useState({name:"",email:"",phone:""});
   const [gameForm,setGameForm] = useState({title:"",categoryId:"",description:""});
   const [sessionForm,setSessionForm] = useState({customerId:"",pcId:""});
   const [busy,setBusy] = useState(false);
@@ -39,11 +37,11 @@ export default function Home() {
   const refresh = useCallback(async () => {
     const [d,p,c,s,g] = await Promise.all([
       api<Dashboard>("/api/dashboard"), api<PC[]>("/api/pcs"),
-      api<Customer[]>(`/api/customers?search=${encodeURIComponent(customerSearch)}`),
+      api<Customer[]>("/api/customers"),
       api<Session[]>("/api/sessions"), api<{games:Game[];categories:Category[]}>("/api/games")
     ]);
     setDashboard(d); setPcs(p); setCustomers(c); setSessions(s); setGames(g.games); setCategories(g.categories);
-  },[customerSearch]);
+  },[]);
 
   useEffect(() => {
     let cancelled = false;
@@ -53,7 +51,7 @@ export default function Home() {
         const [d, p, c, s, g] = await Promise.all([
           api<Dashboard>("/api/dashboard"),
           api<PC[]>("/api/pcs"),
-          api<Customer[]>(`/api/customers?search=${encodeURIComponent(customerSearch)}`),
+          api<Customer[]>("/api/customers"),
           api<Session[]>("/api/sessions"),
           api<{ games: Game[]; categories: Category[] }>("/api/games")
         ]);
@@ -78,7 +76,7 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [customerSearch]);
+  }, []);
   async function run(action:()=>Promise<unknown>, success:string) {
     setBusy(true); setError(""); setNotice("");
     try { await action(); await refresh(); setNotice(success); }
@@ -90,9 +88,10 @@ export default function Home() {
     <aside className="sidebar">
       <div className="brand"><div className="brand-mark">GC</div><div><strong>GAMEHUB</strong><small>CAFE MANAGEMENT</small></div></div>
       <div className="side-label">WORKSPACE</div>
-      {["Overview","PC Management","Customers","Sessions","Games"].map(item=><button key={item} className={tab===item?"nav-item active":"nav-item"} onClick={()=>setTab(item)}><span>{({Overview:"▦","PC Management":"▣",Customers:"♙",Sessions:"◷",Games:"▤"} as Record<string,string>)[item]}</span>{item}</button>)}
+      {["Overview","PC Management","Sessions","Games"].map(item=><button key={item} className={tab===item?"nav-item active":"nav-item"} onClick={()=>setTab(item)}><span>{({Overview:"▦","PC Management":"▣",Sessions:"◷",Games:"▤"} as Record<string,string>)[item]}</span>{item}</button>)}
       <Link className="nav-item" href="/operations"><span>⚙</span>Operations</Link>
-      <div className="sidebar-bottom"><span className="live-dot"/> SYSTEM ONLINE<small>Gaming Cafe · Admin</small></div>
+      <Link className="nav-item" href="/commerce"><span>₹</span>Commerce</Link>
+      <div className="sidebar-bottom"><span className="live-dot"/> SYSTEM ONLINE<small>Gaming Cafe · Team</small></div>
     </aside>
     <section className="main-area">
       <header className="topbar"><div><span className="eyebrow">MANAGEMENT CONSOLE</span><h1>{tab}</h1></div><div className="flex items-center gap-2"><button className="refresh-btn" onClick={()=>refresh().catch(e=>setError(e.message))}>↻ Refresh</button><SignOutButton /></div></header>
@@ -112,7 +111,6 @@ export default function Home() {
         <SessionTable sessions={sessions.slice(0,5)}/>
       </div>}
       {tab==="PC Management" && <div className="content"><div className="section-heading"><div><span className="eyebrow">HARDWARE</span><h2>Manage your gaming stations</h2></div></div><div className="pc-grid">{pcs.map(pc=><div className="pc-card" key={pc.pc_id}><PCtile pc={pc}/><div className="pc-actions">{pc.status==="maintenance"?<button disabled={busy} onClick={()=>run(()=>api("/api/pcs",{method:"PATCH",body:JSON.stringify({pcId:pc.pc_id,status:"available"})}),"PC marked available.")}>Mark available</button>:pc.status==="available"?<button disabled={busy} onClick={()=>run(()=>api("/api/pcs",{method:"PATCH",body:JSON.stringify({pcId:pc.pc_id,status:"maintenance"})}),"PC moved to maintenance.")}>Set maintenance</button>:<span className="muted">End active session first</span>}</div></div>)}</div></div>}
-      {tab==="Customers" && <div className="content"><div className="section-heading"><div><span className="eyebrow">CUSTOMER DIRECTORY</span><h2>Customers</h2></div></div><form className="panel form-grid" onSubmit={e=>{e.preventDefault();run(async()=>{await api("/api/customers",{method:"POST",body:JSON.stringify(customerForm)});setCustomerForm({name:"",email:"",phone:""});},"Customer added successfully.");}}><h3>Add a customer</h3><input placeholder="Full name" required value={customerForm.name} onChange={e=>setCustomerForm({...customerForm,name:e.target.value})}/><input placeholder="Email address" type="email" required value={customerForm.email} onChange={e=>setCustomerForm({...customerForm,email:e.target.value})}/><input placeholder="Phone (optional)" value={customerForm.phone} onChange={e=>setCustomerForm({...customerForm,phone:e.target.value})}/><button className="primary-btn" disabled={busy}>Add customer</button></form><div className="table-tools"><input placeholder="Search name, email or phone…" value={customerSearch} onChange={e=>setCustomerSearch(e.target.value)}/><span>{customers.length} results</span></div><div className="table-wrap"><table><thead><tr><th>NAME</th><th>EMAIL</th><th>PHONE</th><th>JOINED</th></tr></thead><tbody>{customers.map(c=><tr key={c.customer_id}><td>{c.name}</td><td>{c.email}</td><td>{c.phone||"—"}</td><td>{new Date(c.join_date).toLocaleDateString()}</td></tr>)}</tbody></table></div></div>}
       {tab==="Sessions" && <div className="content"><div className="section-heading"><div><span className="eyebrow">PLAYTIME & BILLING</span><h2>Gaming sessions</h2></div></div><form className="panel form-grid" onSubmit={e=>{e.preventDefault();run(async()=>{await api("/api/sessions",{method:"POST",body:JSON.stringify(sessionForm)});setSessionForm({customerId:"",pcId:""});},"Session started.");}}><h3>Start a session</h3><select required value={sessionForm.customerId} onChange={e=>setSessionForm({...sessionForm,customerId:e.target.value})}><option value="">Choose customer</option>{customers.map(c=><option key={c.customer_id} value={c.customer_id}>{c.name}</option>)}</select><select required value={sessionForm.pcId} onChange={e=>setSessionForm({...sessionForm,pcId:e.target.value})}><option value="">Choose available PC</option>{pcs.filter(p=>p.status==="available").map(p=><option key={p.pc_id} value={p.pc_id}>{p.pc_name} · {money(p.hourly_rate)}/hr</option>)}</select><button className="primary-btn" disabled={busy}>Start session</button></form><SessionTable sessions={sessions} onEnd={id=>run(()=>api("/api/sessions",{method:"PATCH",body:JSON.stringify({sessionId:id})}),"Session ended and bill calculated.")} busy={busy}/></div>}
       {tab==="Games" && <div className="content"><div className="section-heading"><div><span className="eyebrow">GAME LIBRARY</span><h2>Games & categories</h2></div></div><form className="panel form-grid" onSubmit={e=>{e.preventDefault();run(async()=>{await api("/api/games",{method:"POST",body:JSON.stringify(gameForm)});setGameForm({title:"",categoryId:"",description:""});},"Game added.");}}><h3>Add a game</h3><input placeholder="Game title" required value={gameForm.title} onChange={e=>setGameForm({...gameForm,title:e.target.value})}/><select value={gameForm.categoryId} onChange={e=>setGameForm({...gameForm,categoryId:e.target.value})}><option value="">No category</option>{categories.map(c=><option key={c.category_id} value={c.category_id}>{c.category_name}</option>)}</select><input placeholder="Description (optional)" value={gameForm.description} onChange={e=>setGameForm({...gameForm,description:e.target.value})}/><button className="primary-btn" disabled={busy}>Add game</button></form><div className="game-grid">{games.map(g=><div className="game-card" key={g.game_id}><span className="game-symbol">▤</span><div><strong>{g.title}</strong><small>{g.category_name||"Uncategorised"}</small><p>{g.description}</p></div></div>)}</div></div>}
       </>}
