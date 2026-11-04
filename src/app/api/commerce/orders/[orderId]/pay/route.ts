@@ -23,6 +23,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "Choose cash or demo payment." }, { status: 400 });
   }
 
+  if (auth.profile.role === "customer" && method !== "demo") {
+    return NextResponse.json({ error: "Customers can only use the demo payment option." }, { status: 403 });
+  }
+
   const customerId = auth.profile.role === "customer"
     ? auth.profile.customerId
     : null;
