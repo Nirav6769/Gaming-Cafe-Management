@@ -15,9 +15,13 @@ export async function POST(request: NextRequest) {
     : Number(body?.customerId);
   const paymentMethod = String(body?.paymentMethod ?? (auth.profile.role === "customer" ? "upi_demo" : "cash"));
 
+  const allowedMethods = auth.profile.role === "customer"
+    ? ["upi_demo", "card_demo"]
+    : ["cash", "upi_demo", "card_demo"];
+
   if (!Number.isInteger(planId) || planId < 1 ||
       !Number.isInteger(customerId) || !customerId || customerId < 1 ||
-      !["cash", "upi_demo", "card_demo"].includes(paymentMethod)) {
+      !allowedMethods.includes(paymentMethod)) {
     return NextResponse.json({ error: "Select a valid membership plan, customer and demo payment method." }, { status: 400 });
   }
 

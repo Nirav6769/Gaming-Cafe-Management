@@ -213,7 +213,20 @@ BEGIN
     RAISE EXCEPTION 'Items can only be changed while an order is pending';
   END IF;
 
-  IF TG_OP = 'INSERT' OR NEW.snack_id IS DISTINCT FROM OLD.snack_id THEN
+  IF TG_OP = 'INSERT' THEN
+    SELECT name, unit_price
+    INTO snack_name, snack_price
+    FROM public.snack_items
+    WHERE snack_id = NEW.snack_id AND is_active = TRUE
+    FOR SHARE;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'Snack item is unavailable';
+    END IF;
+
+    NEW.item_name_snapshot := snack_name;
+    NEW.unit_price_at_purchase := snack_price;
+  ELSIF NEW.snack_id IS DISTINCT FROM OLD.snack_id THEN
     SELECT name, unit_price
     INTO snack_name, snack_price
     FROM public.snack_items
@@ -494,15 +507,29 @@ RETURNS TRIGGER
 LANGUAGE plpgsql
 AS $$
 BEGIN
-  IF NEW.status = 'paid' AND (TG_OP = 'INSERT' OR OLD.status IS DISTINCT FROM NEW.status) THEN
-    UPDATE public.orders
-    SET status = 'paid'
-    WHERE order_id = NEW.order_id AND status = 'pending';
-  ELSIF NEW.status = 'refunded' AND
-        (TG_OP = 'INSERT' OR OLD.status IS DISTINCT FROM NEW.status) THEN
-    UPDATE public.orders
-    SET status = 'refunded'
-    WHERE order_id = NEW.order_id AND status = 'paid';
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.status = 'paid' THEN
+      UPDATE public.orders
+      SET status = 'paid'
+      WHERE order_id = NEW.order_id AND status = 'pending';
+    ELSIF NEW.status = 'refunded' THEN
+      UPDATE public.orders
+      SET status = 'refunded'
+      WHERE order_id = NEW.order_id AND status = 'paid';
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  IF NEW.status IS DISTINCT FROM OLD.status THEN
+    IF NEW.status = 'paid' THEN
+      UPDATE public.orders
+      SET status = 'paid'
+      WHERE order_id = NEW.order_id AND status = 'pending';
+    ELSIF NEW.status = 'refunded' THEN
+      UPDATE public.orders
+      SET status = 'refunded'
+      WHERE order_id = NEW.order_id AND status = 'paid';
+    END IF;
   END IF;
   RETURN NEW;
 END;

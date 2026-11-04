@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query, errorMessage } from "@/lib/db";
 import { requireApiRole } from "@/lib/auth";
-import { isValidCustomerEmail } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
 
@@ -23,23 +22,18 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
   const body = await request.json().catch(() => null);
   const name = String(body?.name ?? "").trim();
-  const email = auth.profile.role === "customer"
-    ? null
-    : String(body?.email ?? "").trim().toLowerCase();
   const phone = String(body?.phone ?? "").trim() || null;
-  if (!name || name.length > 100 ||
-      (email !== null && (!isValidCustomerEmail(email) || email.length > 100)) ||
-      (phone && phone.length > 15)) {
-    return NextResponse.json({ error: "Enter a valid name, email (staff/admin only) and phone number up to 15 characters." }, { status: 400 });
+  if (!name || name.length > 100 || (phone && phone.length > 15)) {
+    return NextResponse.json({ error: "Enter a valid name and phone number up to 15 characters." }, { status: 400 });
   }
 
   try {
     const result = await query(
       `UPDATE public.customers
-       SET name = $1, email = COALESCE($2, email), phone = $3
-       WHERE customer_id = $4
+       SET name = $1, phone = $2
+       WHERE customer_id = $3
        RETURNING customer_id, name, email, phone, join_date, updated_at`,
-      [name, email, phone, customerId],
+      [name, phone, customerId],
     );
     if (!result.rowCount) return NextResponse.json({ error: "Customer not found." }, { status: 404 });
     return NextResponse.json(result.rows[0]);
