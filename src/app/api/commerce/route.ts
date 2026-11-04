@@ -34,8 +34,12 @@ export async function GET() {
       query(
         `SELECT cm.membership_id, cm.customer_id, c.name AS customer_name,
                 cm.plan_id, mp.name AS plan_name, mp.discount_percent,
-                cm.start_at, cm.end_at, cm.status, cm.price_paid,
-                cm.payment_method
+                cm.start_at, cm.end_at,
+                CASE
+                  WHEN cm.status = 'active' AND cm.end_at <= CURRENT_TIMESTAMP THEN 'expired'
+                  ELSE cm.status
+                END AS status,
+                cm.price_paid, cm.payment_method
          FROM public.customer_memberships cm
          JOIN public.customers c ON c.customer_id = cm.customer_id
          JOIN public.membership_plans mp ON mp.plan_id = cm.plan_id
