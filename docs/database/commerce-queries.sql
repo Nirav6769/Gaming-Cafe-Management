@@ -23,7 +23,10 @@ VALUES (1, 1, 'upi_demo');
 
 -- INSERT: create a snack catalogue item.
 INSERT INTO public.snack_items (name, category, description, unit_price, stock_quantity)
-VALUES ('Example nachos', 'Snacks', 'Demo snack item', 85.00, 20);
+VALUES
+  ('Example nachos', 'Snacks', 'Demo snack item', 85.00, 20),
+  ('Example soda', 'Drinks', 'Demo drink item', 40.00, 20)
+ON CONFLICT (name) DO NOTHING;
 
 -- INSERT: create a pending order and its lines in the same transaction.
 -- BEFORE INSERT triggers snapshot the membership discount and snack prices.
@@ -35,21 +38,30 @@ WITH created_order AS (
 )
 INSERT INTO public.order_items
   (order_id, snack_id, item_name_snapshot, quantity, unit_price_at_purchase, line_total)
-SELECT order_id, 1, '', 2, 0, 0
-FROM created_order;
+SELECT created_order.order_id, snack.snack_id, '', requested.quantity, 0, 0
+FROM created_order
+JOIN (VALUES ('Example nachos', 2), ('Example soda', 1))
+  AS requested(snack_name, quantity) ON TRUE
+JOIN public.snack_items snack ON snack.name = requested.snack_name;
 COMMIT;
 
 -- UPDATE: quantity-only update preserves the historical unit price.
-UPDATE public.order_items
+UPDATE public.order_items oi
 SET quantity = 3
-WHERE order_item_id = 1
-  AND order_id = 1;
+FROM public.orders o, public.snack_items si
+WHERE oi.order_id = o.order_id
+  AND oi.snack_id = si.snack_id
+  AND oi.order_id = 1
+  AND si.name = 'Example nachos'
+  AND o.status = 'pending';
 
 -- DELETE: only a line in a pending order may be deleted; totals recalculate.
 DELETE FROM public.order_items oi
-USING public.orders o
+USING public.orders o, public.snack_items si
 WHERE oi.order_id = o.order_id
-  AND oi.order_item_id = 1
+  AND oi.snack_id = si.snack_id
+  AND si.name = 'Example soda'
+  AND o.order_id = 1
   AND o.status = 'pending';
 
 -- Payment transaction: record pending, then set paid. Payment/order/stock
@@ -83,7 +95,7 @@ SELECT c.customer_id, c.name, COUNT(*) AS paid_orders,
        SUM(o.total_amount) AS paid_order_value
 FROM public.orders o
 JOIN public.customers c ON c.customer_id = o.customer_id
-WHERE o.status IN ('paid', 'refunded')
+WHERE o.status = 'paid'
 GROUP BY c.customer_id, c.name
 HAVING COUNT(*) > 1
 ORDER BY paid_order_value DESC;
@@ -112,7 +124,7 @@ SELECT DATE(o.created_at) AS order_day,
        SUM(o.discount_amount) AS discounts,
        SUM(o.total_amount) AS net_order_revenue
 FROM public.orders o
-WHERE o.status IN ('paid', 'refunded')
+WHERE o.status = 'paid'
 GROUP BY DATE(o.created_at)
 ORDER BY order_day DESC;
 
