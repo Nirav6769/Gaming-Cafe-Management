@@ -35,7 +35,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
        SET status = $1
        WHERE order_id = $2
          AND ($3::INTEGER IS NULL OR customer_id = $3)
-         AND ($4::BOOLEAN = FALSE OR (status = 'draft' AND $1 = 'cancelled'))
+         AND ($4::BOOLEAN = FALSE OR status = 'draft')
        RETURNING order_id, customer_id, status, subtotal, discount_percent,
                  discount_amount, total_amount, placed_at, fulfilled_at`,
       [nextStatus, orderId, customerId, auth.profile.role === "customer"],
