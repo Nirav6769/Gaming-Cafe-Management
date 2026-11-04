@@ -218,7 +218,7 @@ export default function CommerceClient({
                         ...(canManage ? { customerId: Number(targetCustomerId) } : {}),
                       }),
                     }), "Membership activated for the selected customer.");
-                  }}>{isCustomer ? "Purchase membership" : "Assign membership"}</button>}
+                  }}>{isCustomer ? "Activate membership (demo)" : "Assign membership"}</button>}
                 </article>
               ))}
             </div>
