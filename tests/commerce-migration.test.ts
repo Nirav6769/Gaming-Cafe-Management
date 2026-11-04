@@ -2,7 +2,20 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { test } from "node:test";
+import type { PoolClient } from "pg";
 import { databaseTestSkip, withRollback } from "./helpers/db";
+
+async function expectDbFailure(
+  client: PoolClient,
+  sql: string,
+  values: unknown[],
+  pattern: RegExp,
+) {
+  await client.query("SAVEPOINT expected_failure");
+  await assert.rejects(client.query(sql, values), pattern);
+  await client.query("ROLLBACK TO SAVEPOINT expected_failure");
+  await client.query("RELEASE SAVEPOINT expected_failure");
+}
 
 const fixtureSql = `
 DO $$
@@ -132,18 +145,18 @@ test(
       );
       const sodaId = Number(soda.rows[0].snack_id);
 
-      await assert.rejects(
-        client.query(
-          `INSERT INTO public.snack_items (name, unit_price, stock_quantity)
-           VALUES ('Negative stock', 2, -1)`,
-        ),
+      await expectDbFailure(
+        client,
+        `INSERT INTO public.snack_items (name, unit_price, stock_quantity)
+         VALUES ('Negative stock', 2, -1)`,
+        [],
         /check constraint/i,
       );
-      await assert.rejects(
-        client.query(
-          `INSERT INTO public.snack_items (name, unit_price, stock_quantity)
-           VALUES ('Negative price', -2, 1)`,
-        ),
+      await expectDbFailure(
+        client,
+        `INSERT INTO public.snack_items (name, unit_price, stock_quantity)
+         VALUES ('Negative price', -2, 1)`,
+        [],
         /check constraint/i,
       );
 
@@ -223,12 +236,12 @@ test(
          VALUES ($1, 0, 'cash', 'pending') RETURNING payment_id`,
         [emptyOrderId],
       );
-      await client.query("SAVEPOINT empty_order_payment");
-      await assert.rejects(
-        client.query("UPDATE public.payments SET status = 'paid' WHERE payment_id = $1", [emptyPayment.rows[0].payment_id]),
+      await expectDbFailure(
+        client,
+        "UPDATE public.payments SET status = 'paid' WHERE payment_id = $1",
+        [emptyPayment.rows[0].payment_id],
         /empty order/i,
       );
-      await client.query("ROLLBACK TO SAVEPOINT empty_order_payment");
 
       const insufficient = await client.query(
         "INSERT INTO public.orders (customer_id) VALUES ($1) RETURNING order_id",
@@ -250,12 +263,12 @@ test(
          VALUES ($1, $2, 'cash', 'pending') RETURNING payment_id`,
         [insufficientId, insufficientTotal.rows[0].total_amount],
       );
-      await client.query("SAVEPOINT insufficient_stock_payment");
-      await assert.rejects(
-        client.query("UPDATE public.payments SET status = 'paid' WHERE payment_id = $1", [failedPayment.rows[0].payment_id]),
+      await expectDbFailure(
+        client,
+        "UPDATE public.payments SET status = 'paid' WHERE payment_id = $1",
+        [failedPayment.rows[0].payment_id],
         /insufficient stock/i,
       );
-      await client.query("ROLLBACK TO SAVEPOINT insufficient_stock_payment");
 
       let stock = await client.query(
         "SELECT stock_quantity FROM public.snack_items WHERE snack_id = $1",
@@ -323,16 +336,22 @@ test(
       stock = await client.query("SELECT stock_quantity FROM public.snack_items WHERE snack_id = $1", [chipsId]);
       assert.equal(Number(stock.rows[0].stock_quantity), 8);
 
-      await assert.rejects(
-        client.query("UPDATE public.order_items SET quantity = 3 WHERE order_id = $1", [successfulId]),
+      await expectDbFailure(
+        client,
+        "UPDATE public.order_items SET quantity = 3 WHERE order_id = $1",
+        [successfulId],
         /pending/i,
       );
-      await assert.rejects(
-        client.query("DELETE FROM public.order_items WHERE order_id = $1", [successfulId]),
+      await expectDbFailure(
+        client,
+        "DELETE FROM public.order_items WHERE order_id = $1",
+        [successfulId],
         /pending/i,
       );
-      await assert.rejects(
-        client.query("DELETE FROM public.orders WHERE order_id = $1", [successfulId]),
+      await expectDbFailure(
+        client,
+        "DELETE FROM public.orders WHERE order_id = $1",
+        [successfulId],
         /foreign key/i,
       );
 
@@ -359,8 +378,10 @@ test(
         "INSERT INTO public.orders (customer_id) VALUES ($1) RETURNING order_id",
         [customerId],
       );
-      await assert.rejects(
-        client.query("UPDATE public.orders SET status = 'paid' WHERE order_id = $1", [directPaid.rows[0].order_id]),
+      await expectDbFailure(
+        client,
+        "UPDATE public.orders SET status = 'paid' WHERE order_id = $1",
+        [directPaid.rows[0].order_id],
         /matching payment/i,
       );
 
