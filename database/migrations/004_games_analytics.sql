@@ -85,11 +85,12 @@ DECLARE
   v_status TEXT;
   v_max_participants INTEGER;
   v_deadline TIMESTAMPTZ;
+  v_start_date DATE;
   v_current_count INTEGER;
 BEGIN
   -- Row lock parent tournament to serialize concurrent registration attempts
-  SELECT status, max_participants, registration_deadline
-  INTO v_status, v_max_participants, v_deadline
+  SELECT status, max_participants, registration_deadline, start_date
+  INTO v_status, v_max_participants, v_deadline, v_start_date
   FROM public.tournaments
   WHERE tournament_id = NEW.tournament_id
   FOR UPDATE;
@@ -104,6 +105,10 @@ BEGIN
 
   IF v_deadline IS NOT NULL AND CURRENT_TIMESTAMP > v_deadline THEN
     RAISE EXCEPTION 'Tournament registration deadline has passed' USING ERRCODE = '23514';
+  END IF;
+
+  IF v_deadline IS NULL AND v_start_date IS NOT NULL AND CURRENT_DATE > v_start_date THEN
+    RAISE EXCEPTION 'Tournament has already started' USING ERRCODE = '23514';
   END IF;
 
   IF v_max_participants IS NOT NULL THEN

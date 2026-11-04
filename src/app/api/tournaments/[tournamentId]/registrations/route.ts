@@ -157,9 +157,13 @@ export async function DELETE(
   }
 
   try {
-    // Check tournament deadline
-    const tournCheck = await query<{ status: string; registration_deadline: string | null }>(
-      "SELECT status, registration_deadline FROM public.tournaments WHERE tournament_id = $1;",
+    // Check tournament deadline and start date
+    const tournCheck = await query<{
+      status: string;
+      registration_deadline: string | null;
+      start_date: string;
+    }>(
+      "SELECT status, registration_deadline, start_date FROM public.tournaments WHERE tournament_id = $1;",
       [tournamentId]
     );
 
@@ -171,6 +175,12 @@ export async function DELETE(
     if (tournament.registration_deadline && new Date() > new Date(tournament.registration_deadline)) {
       return NextResponse.json(
         { error: "Registration deadline has passed. Cancellation is no longer permitted." },
+        { status: 400 }
+      );
+    }
+    if (!tournament.registration_deadline && tournament.start_date && new Date().toISOString().slice(0, 10) > tournament.start_date) {
+      return NextResponse.json(
+        { error: "Tournament has already started. Cancellation is no longer permitted." },
         { status: 400 }
       );
     }

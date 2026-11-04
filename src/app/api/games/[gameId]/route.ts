@@ -84,10 +84,14 @@ export async function PATCH(
   const existing = existingRes.rows[0];
   const body = await request.json().catch(() => null);
 
+  if (body?.is_active !== undefined && typeof body.is_active !== "boolean") {
+    return NextResponse.json({ error: "is_active must be a boolean." }, { status: 400 });
+  }
+
   const title = body?.title !== undefined ? String(body.title).trim() : existing.title;
   const description = body?.description !== undefined ? (String(body.description).trim() || null) : existing.description;
   const categoryId = body?.categoryId !== undefined ? (body.categoryId === null ? null : Number(body.categoryId)) : existing.category_id;
-  const isActive = body?.is_active !== undefined ? Boolean(body.is_active) : existing.is_active;
+  const isActive = typeof body?.is_active === "boolean" ? body.is_active : existing.is_active;
 
   if (!title || title.length > 100) {
     return NextResponse.json({ error: "Game title cannot be empty or exceed 100 characters." }, { status: 400 });

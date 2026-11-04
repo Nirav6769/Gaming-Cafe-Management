@@ -24,7 +24,7 @@ test("tournament detail API prevents deleting tournament with existing registrat
   assert.match(file, /Tournament has registered participants/);
 });
 
-test("tournament registrations API translates duplicate and capacity trigger errors to 409", async () => {
+test("tournament registrations API translates duplicate and capacity trigger errors to 409 and guards cancellations after start date", async () => {
   const file = await readFile(
     resolve(process.cwd(), "src/app/api/tournaments/[tournamentId]/registrations/route.ts"),
     "utf8"
@@ -33,4 +33,5 @@ test("tournament registrations API translates duplicate and capacity trigger err
   assert.match(file, /Customer is already registered for this tournament/);
   assert.match(file, /err\?\.code === "23514"/);
   assert.match(file, /Registration deadline has passed/);
+  assert.match(file, /Tournament has already started/);
 });

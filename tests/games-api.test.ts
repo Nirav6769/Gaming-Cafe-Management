@@ -24,8 +24,10 @@ test("games API endpoint enforces admin role on create and regenerates embedding
   assert.match(file, /embedding_updated_at/);
 });
 
-test("game detail API endpoint protects history and regenerates embedding on semantic updates", async () => {
+test("game detail API endpoint protects history, strictly validates is_active boolean, and regenerates embedding on semantic updates", async () => {
   const file = await readFile(resolve(process.cwd(), "src/app/api/games/[gameId]/route.ts"), "utf8");
+  assert.match(file, /typeof body\.is_active !== "boolean"/);
+  assert.match(file, /is_active must be a boolean/);
   assert.match(file, /semanticFieldsChanged/);
   assert.match(file, /generateGameEmbedding/);
   assert.match(file, /SELECT COUNT\(\*\)::text AS count FROM public\.session_games WHERE game_id = \$1/);
