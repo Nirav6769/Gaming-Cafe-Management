@@ -439,6 +439,11 @@ BEGIN
   END IF;
 
   IF TG_OP = 'UPDATE' THEN
+    IF NEW.status = OLD.status AND NEW.amount = OLD.amount AND NEW.method = OLD.method
+       AND ((NEW.status = 'paid' AND order_status = 'paid')
+         OR (NEW.status = 'refunded' AND order_status = 'refunded')) THEN
+      RETURN NEW;
+    END IF;
     IF NEW.order_id <> OLD.order_id THEN
       RAISE EXCEPTION 'A payment cannot be moved to another order';
     END IF;
@@ -508,7 +513,8 @@ CREATE TRIGGER payments_apply_to_order
 AFTER INSERT OR UPDATE OF status ON public.payments
 FOR EACH ROW EXECUTE FUNCTION public.commerce_apply_payment_to_order();
 
-CREATE OR REPLACE VIEW public.vw_active_customer_memberships AS
+DROP VIEW IF EXISTS public.vw_active_customer_memberships;
+CREATE VIEW public.vw_active_customer_memberships AS
 SELECT
   cm.membership_id,
   cm.customer_id,
@@ -526,7 +532,8 @@ WHERE cm.status = 'active'
   AND CURRENT_TIMESTAMP >= cm.start_at
   AND CURRENT_TIMESTAMP < cm.end_at;
 
-CREATE OR REPLACE VIEW public.vw_snack_sales_summary AS
+DROP VIEW IF EXISTS public.vw_snack_sales_summary;
+CREATE VIEW public.vw_snack_sales_summary AS
 SELECT
   si.snack_id,
   si.name AS snack_name,
