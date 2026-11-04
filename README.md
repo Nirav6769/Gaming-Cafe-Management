@@ -41,13 +41,15 @@ Migration 001 creates `user_profiles` and protects the application tables. Migra
    npm install
    ```
 
-3. Create `.env.local` in the project root and add your Supabase PostgreSQL connection string:
+3. Copy `.env.example` to `.env.local` and configure the Supabase project values:
 
    ```env
    DATABASE_URL=postgresql://...
+   NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=YOUR_SUPABASE_PUBLISHABLE_KEY
    ```
 
-   Use the Supabase Session Pooler connection string for serverless hosting. Never commit `.env.local`.
+   Use the Supabase Session Pooler connection string for server-side database access. `DATABASE_URL` must remain server-only. Never commit `.env.local`, database passwords or secret/service-role keys.
 
 4. Start the app:
 
