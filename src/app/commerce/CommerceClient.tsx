@@ -167,6 +167,26 @@ export default function CommerceClient({
               <div className="welcome-icon">₹</div>
             </div>
 
+            {canManage && (
+              <div className="panel mt-3 grid gap-3 p-4">
+                <label htmlFor="commerce-customer">Customer for membership and staff orders</label>
+                <select
+                  id="commerce-customer"
+                  required
+                  value={targetCustomerId}
+                  onChange={(event) => setTargetCustomerId(event.target.value)}
+                >
+                  <option value="">Choose customer</option>
+                  {data.customers.map((customer) => (
+                    <option key={customer.customer_id} value={customer.customer_id}>
+                      {customer.name} · {customer.email} · #{customer.customer_id}
+                    </option>
+                  ))}
+                </select>
+                <small className="muted">Select the customer before assigning a membership or creating an order.</small>
+              </div>
+            )}
+
             <div className="section-heading">
               <div><span className="eyebrow">MEMBERSHIP PLANS</span><h2>Available plans</h2></div>
               <span className="muted">{data.plans.filter((plan) => plan.is_active).length} active plans</span>
@@ -286,19 +306,6 @@ export default function CommerceClient({
             <div className="section-heading">
               <div><span className="eyebrow">NEW ORDER</span><h2>Create a snack order</h2></div>
             </div>
-            {canManage && (
-              <div className="table-tools">
-                <label htmlFor="commerce-customer">Customer</label>
-                <select id="commerce-customer" required value={targetCustomerId} onChange={(event) => setTargetCustomerId(event.target.value)}>
-                  <option value="">Choose customer</option>
-                  {data.customers.map((customer) => (
-                    <option key={customer.customer_id} value={customer.customer_id}>
-                      {customer.name} · {customer.email} · #{customer.customer_id}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
             <div className="table-wrap">
               <table>
                 <thead><tr><th>ITEM</th><th>UNIT PRICE</th><th>AVAILABLE</th><th>QUANTITY</th></tr></thead>
