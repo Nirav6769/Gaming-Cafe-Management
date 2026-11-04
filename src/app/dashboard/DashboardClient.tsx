@@ -92,6 +92,7 @@ export default function Home() {
       <div className="side-label">WORKSPACE</div>
       {["Overview","PC Management","Customers","Sessions","Games"].map(item=><button key={item} className={tab===item?"nav-item active":"nav-item"} onClick={()=>setTab(item)}><span>{({Overview:"▦","PC Management":"▣",Customers:"♙",Sessions:"◷",Games:"▤"} as Record<string,string>)[item]}</span>{item}</button>)}
       <Link className="nav-item" href="/operations"><span>⚙</span>Operations</Link>
+      <Link className="nav-item" href="/commerce"><span>₹</span>Commerce</Link>
       <div className="sidebar-bottom"><span className="live-dot"/> SYSTEM ONLINE<small>Gaming Cafe · Admin</small></div>
     </aside>
     <section className="main-area">
