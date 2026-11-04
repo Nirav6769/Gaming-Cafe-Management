@@ -4,8 +4,6 @@ import { requireApiRole } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-type RequestedItem = { snackId: number; quantity: number };
-
 export async function POST(request: NextRequest) {
   const auth = await requireApiRole(["admin", "staff", "customer"]);
   if (auth.response) return auth.response;
@@ -20,10 +18,8 @@ export async function POST(request: NextRequest) {
   for (const raw of rawItems) {
     const snackId = Number(raw?.snackId);
     const quantity = Number(raw?.quantity);
-    if (
-      !Number.isInteger(snackId) || snackId < 1 ||
-      !Number.isInteger(quantity) || quantity < 1 || quantity > 999
-    ) {
+    if (!Number.isInteger(snackId) || snackId < 1 ||
+        !Number.isInteger(quantity) || quantity < 1 || quantity > 999) {
       return NextResponse.json({ error: "Each item needs a valid snack and quantity (1–999)." }, { status: 400 });
     }
     itemMap.set(snackId, (itemMap.get(snackId) ?? 0) + quantity);
@@ -39,11 +35,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Select a valid customer." }, { status: 400 });
   }
 
-  const notes = String(body?.notes ?? "").trim() || null;
-  if (notes && notes.length > 500) {
-    return NextResponse.json({ error: "Order notes cannot exceed 500 characters." }, { status: 400 });
-  }
-
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -57,28 +48,30 @@ export async function POST(request: NextRequest) {
     }
 
     const order = await client.query(
-      `INSERT INTO public.orders (customer_id, created_by_staff_id, notes)
-       VALUES ($1, $2, $3)
-       RETURNING order_id, customer_id, status, discount_percent, subtotal, discount_amount, total_amount`,
-      [customerId, auth.profile.role === "customer" ? null : auth.profile.staffId, notes],
+      `INSERT INTO public.orders (customer_id, created_by)
+       VALUES ($1, $2)
+       RETURNING order_id, customer_id, status, discount_percent_snapshot`,
+      [customerId, auth.profile.authUserId],
     );
-    const orderId = order.rows[0].order_id as number;
+    const orderId = Number(order.rows[0].order_id);
 
     for (const [snackId, quantity] of itemMap) {
       await client.query(
-        `INSERT INTO public.order_items (order_id, snack_id, quantity, item_name_snapshot, unit_price, line_total)
-         VALUES ($1, $2, $3, '', 0, 0)`,
+        `INSERT INTO public.order_items
+           (order_id, snack_id, item_name_snapshot, quantity, unit_price_at_purchase, line_total)
+         VALUES ($1, $2, '', $3, 0, 0)`,
         [orderId, snackId, quantity],
       );
     }
 
-    const result = await client.query(
-      `SELECT order_id, customer_id, status, subtotal, discount_percent, discount_amount, total_amount
+    const totals = await client.query(
+      `SELECT order_id, customer_id, status, subtotal, discount_percent_snapshot,
+              discount_amount, total_amount
        FROM public.orders WHERE order_id = $1`,
       [orderId],
     );
     await client.query("COMMIT");
-    return NextResponse.json(result.rows[0], { status: 201 });
+    return NextResponse.json(totals.rows[0], { status: 201 });
   } catch (error) {
     await client.query("ROLLBACK");
     return NextResponse.json({ error: errorMessage(error) }, { status: 409 });
