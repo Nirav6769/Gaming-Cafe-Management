@@ -45,7 +45,7 @@ function sqlCommand(text: unknown): string {
       : text && typeof text === "object" && "text" in text
         ? String((text as { text: unknown }).text)
         : "";
-  return sql.trim().split(/\\s+/, 1)[0]?.toUpperCase() ?? "";
+  return sql.trim().split(/\s+/, 1)[0]?.toUpperCase() ?? "";
 }
 
 async function beginWithIdentity(
