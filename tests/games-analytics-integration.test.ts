@@ -123,11 +123,10 @@ test(
       );
       const tournId = tourn.rows[0].tournament_id as number;
 
-      // Register first 2 participants successfully
+      // Register first participant
       await client.query("INSERT INTO tournament_registrations (tournament_id, customer_id) VALUES ($1, $2);", [tournId, cust1]);
-      await client.query("INSERT INTO tournament_registrations (tournament_id, customer_id) VALUES ($1, $2);", [tournId, cust2]);
 
-      // Duplicate registration rejected by PK
+      // Duplicate registration rejected by PK while under capacity (count = 1 < 2)
       await expectDbFailure(
         client,
         "INSERT INTO tournament_registrations (tournament_id, customer_id) VALUES ($1, $2);",
@@ -135,7 +134,10 @@ test(
         /duplicate key|unique constraint/i
       );
 
-      // 3rd registration rejected by capacity trigger
+      // Register second participant (reaches max capacity of 2)
+      await client.query("INSERT INTO tournament_registrations (tournament_id, customer_id) VALUES ($1, $2);", [tournId, cust2]);
+
+      // 3rd participant rejected by capacity trigger (count = 2 >= 2)
       await expectDbFailure(
         client,
         "INSERT INTO tournament_registrations (tournament_id, customer_id) VALUES ($1, $2);",
