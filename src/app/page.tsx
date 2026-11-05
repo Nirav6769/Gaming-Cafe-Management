@@ -11,8 +11,25 @@ type Dashboard = { pcs:{total:number;available:number;occupied:number;maintenanc
 
 async function api<T>(url:string, options?:RequestInit):Promise<T> {
   const response = await fetch(url, { ...options, headers: { "Content-Type":"application/json", ...options?.headers } });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || "Request failed");
+  const raw = await response.text();
+  let data: unknown = null;
+  if (raw.trim()) {
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      throw new Error(`Server returned a non-JSON response (HTTP ${response.status}). Check the API route/server logs.`);
+    }
+  }
+  if (!response.ok) {
+    const message =
+      data && typeof data === "object" && "error" in data
+        ? String((data as { error: unknown }).error)
+        : `Request failed (HTTP ${response.status})`;
+    throw new Error(message);
+  }
+  if (data === null) {
+    throw new Error(`Server returned an empty response (HTTP ${response.status}).`);
+  }
   return data as T;
 }
 const money = (value:string|number) => "₹" + Number(value || 0).toFixed(2);
