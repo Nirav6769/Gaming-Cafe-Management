@@ -102,6 +102,67 @@ GRANT EXECUTE ON FUNCTION app_private.current_role() TO gamehub_runtime;
 GRANT EXECUTE ON FUNCTION app_private.current_customer_id() TO gamehub_runtime;
 GRANT EXECUTE ON FUNCTION app_private.current_staff_id() TO gamehub_runtime;
 
+
+-- The capacity trigger must count registrations belonging to every customer.
+-- Run only this internal trigger function as its owner; application tables
+-- remain protected by RLS for all direct application queries.
+CREATE OR REPLACE FUNCTION public.games_guard_tournament_registration()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $function$
+DECLARE
+  v_status TEXT;
+  v_max_participants INTEGER;
+  v_deadline TIMESTAMPTZ;
+  v_start_date DATE;
+  v_current_count INTEGER;
+BEGIN
+  SELECT status, max_participants, registration_deadline, start_date
+  INTO v_status, v_max_participants, v_deadline, v_start_date
+  FROM public.tournaments
+  WHERE tournament_id = NEW.tournament_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Tournament does not exist' USING ERRCODE = '23503';
+  END IF;
+
+  IF v_status <> 'open' THEN
+    RAISE EXCEPTION 'Tournament is not open for registration (status: %)', v_status
+      USING ERRCODE = '23514';
+  END IF;
+
+  IF v_deadline IS NOT NULL AND CURRENT_TIMESTAMP > v_deadline THEN
+    RAISE EXCEPTION 'Tournament registration deadline has passed' USING ERRCODE = '23514';
+  END IF;
+
+  IF v_start_date IS NOT NULL AND CURRENT_DATE >= v_start_date THEN
+    RAISE EXCEPTION 'Tournament has already started' USING ERRCODE = '23514';
+  END IF;
+
+  IF v_max_participants IS NOT NULL THEN
+    SELECT COUNT(*)::INTEGER
+    INTO v_current_count
+    FROM public.tournament_registrations
+    WHERE tournament_id = NEW.tournament_id;
+
+    IF v_current_count >= v_max_participants THEN
+      RAISE EXCEPTION 'Tournament capacity reached (% participants max)', v_max_participants
+        USING ERRCODE = '23514';
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION public.games_guard_tournament_registration()
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.games_guard_tournament_registration()
+  TO gamehub_runtime;
+
 -- 3. Give the non-bypass runtime role SQL privileges. RLS below is the
 -- authorization boundary; these grants alone do not expose other users' rows.
 GRANT USAGE ON SCHEMA public TO gamehub_runtime;
@@ -386,6 +447,11 @@ CREATE POLICY gamehub_membership_plans_select ON public.membership_plans
   USING (
     is_active = TRUE
     OR app_private.current_role() IN ('admin', 'staff')
+    OR EXISTS (
+      SELECT 1 FROM public.customer_memberships AS cm
+      WHERE cm.plan_id = membership_plans.plan_id
+        AND cm.customer_id = app_private.current_customer_id()
+    )
   );
 DROP POLICY IF EXISTS gamehub_membership_plans_manage ON public.membership_plans;
 CREATE POLICY gamehub_membership_plans_manage ON public.membership_plans
@@ -414,8 +480,24 @@ CREATE POLICY gamehub_memberships_insert ON public.customer_memberships
 DROP POLICY IF EXISTS gamehub_memberships_update ON public.customer_memberships;
 CREATE POLICY gamehub_memberships_update ON public.customer_memberships
   FOR UPDATE TO gamehub_runtime
-  USING (app_private.current_role() IN ('admin', 'staff'))
-  WITH CHECK (app_private.current_role() IN ('admin', 'staff'));
+  USING (
+    app_private.current_role() IN ('admin', 'staff')
+    OR (
+      app_private.current_role() = 'customer'
+      AND customer_id = app_private.current_customer_id()
+      AND status = 'active'
+      AND end_at <= CURRENT_TIMESTAMP
+    )
+  )
+  WITH CHECK (
+    app_private.current_role() IN ('admin', 'staff')
+    OR (
+      app_private.current_role() = 'customer'
+      AND customer_id = app_private.current_customer_id()
+      AND status = 'expired'
+      AND end_at <= CURRENT_TIMESTAMP
+    )
+  );
 DROP POLICY IF EXISTS gamehub_memberships_delete ON public.customer_memberships;
 CREATE POLICY gamehub_memberships_delete ON public.customer_memberships
   FOR DELETE TO gamehub_runtime
