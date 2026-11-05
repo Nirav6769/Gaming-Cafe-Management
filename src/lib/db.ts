@@ -36,7 +36,7 @@ const rawPool =
 
 if (process.env.NODE_ENV !== "production") globalForPg.pgPool = rawPool;
 
-type RawQuery = (text: any, values?: any[]) => Promise<QueryResult<any>>;
+type RawQuery = (text: string, values?: unknown[]) => Promise<QueryResult<QueryResultRow>>;
 
 function sqlCommand(text: unknown): string {
   const sql =
@@ -51,7 +51,7 @@ function sqlCommand(text: unknown): string {
 async function beginWithIdentity(
   rawQuery: RawQuery,
   identity: DatabaseIdentity,
-): Promise<QueryResult<any>> {
+): Promise<QueryResult<QueryResultRow>> {
   const beginResult = await rawQuery("BEGIN");
   try {
     const databaseRole = ROLE_BY_APP_ROLE[identity.role];
@@ -69,14 +69,14 @@ async function beginWithIdentity(
 
 function instrumentClient(client: PoolClient): PoolClient {
   const mutable = client as unknown as {
-    query: (text: any, values?: any[]) => Promise<QueryResult<any>>;
+    query: (text: string, values?: unknown[]) => Promise<QueryResult<QueryResultRow>>;
     release: (error?: Error | boolean) => void;
   };
-  const originalQuery = client.query.bind(client) as RawQuery;
+  const originalQuery = client.query.bind(client) as unknown as RawQuery;
   const originalRelease = client.release.bind(client);
   let transactionIdentity: DatabaseIdentity | null = null;
 
-  mutable.query = async (text: any, values?: any[]) => {
+  mutable.query = async (text: string, values?: unknown[]) => {
     const identity = identityStorage.getStore();
     const command = sqlCommand(text);
 
@@ -163,7 +163,7 @@ async function scopedPoolQuery<T extends QueryResultRow = QueryResultRow>(
 
   try {
     await beginWithIdentity(rawQuery, identity);
-    const result = await rawQuery(text, values as any[]);
+    const result = await rawQuery(text, values);
     await rawQuery("COMMIT");
     return result as QueryResult<T>;
   } catch (error) {
