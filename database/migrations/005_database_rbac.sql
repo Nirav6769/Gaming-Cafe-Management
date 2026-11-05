@@ -670,6 +670,73 @@ CREATE POLICY gamehub_payments_manage ON public.payments
   WITH CHECK (app_private.current_role() IN ('admin', 'staff'));
 
 
+-- The item-total trigger runs under a SECURITY DEFINER function because it
+-- updates derived order totals while a customer is placing/editing their own
+-- order. Its fixed search_path and schema-qualified references prevent object
+-- shadowing. The customer-update guard below checks current_user, so this
+-- internal trigger update is distinct from a customer-issued UPDATE.
+CREATE OR REPLACE FUNCTION public.commerce_recalculate_order_total()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $function$
+DECLARE
+  target_order_id BIGINT;
+  old_order_id BIGINT;
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    target_order_id := OLD.order_id;
+  ELSE
+    target_order_id := NEW.order_id;
+  END IF;
+
+  UPDATE public.orders o
+  SET subtotal = totals.subtotal,
+      discount_amount = ROUND(
+        (totals.subtotal * o.discount_percent_snapshot / 100)::NUMERIC, 2
+      ),
+      total_amount = GREATEST(
+        totals.subtotal - ROUND(
+          (totals.subtotal * o.discount_percent_snapshot / 100)::NUMERIC, 2
+        ),
+        0
+      )
+  FROM (
+    SELECT COALESCE(SUM(oi.line_total), 0)::NUMERIC(10,2) AS subtotal
+    FROM public.order_items oi
+    WHERE oi.order_id = target_order_id
+  ) totals
+  WHERE o.order_id = target_order_id AND o.status = 'pending';
+
+  IF TG_OP = 'UPDATE' AND OLD.order_id <> NEW.order_id THEN
+    old_order_id := OLD.order_id;
+    UPDATE public.orders o
+    SET subtotal = totals.subtotal,
+        discount_amount = ROUND(
+          (totals.subtotal * o.discount_percent_snapshot / 100)::NUMERIC, 2
+        ),
+        total_amount = GREATEST(
+          totals.subtotal - ROUND(
+            (totals.subtotal * o.discount_percent_snapshot / 100)::NUMERIC, 2
+          ),
+          0
+        )
+    FROM (
+      SELECT COALESCE(SUM(oi.line_total), 0)::NUMERIC(10,2) AS subtotal
+      FROM public.order_items oi
+      WHERE oi.order_id = old_order_id
+    ) totals
+    WHERE o.order_id = old_order_id AND o.status = 'pending';
+  END IF;
+
+  RETURN NULL;
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION public.commerce_recalculate_order_total()
+  FROM PUBLIC, anon, authenticated;
+
 -- 7. Prevent customers from changing protected columns even on their own rows.
 -- RLS controls which rows can be touched; these triggers further limit which
 -- fields the customer role may change.
@@ -679,7 +746,7 @@ LANGUAGE plpgsql
 SET search_path = pg_catalog, app_private
 AS $function$
 BEGIN
-  IF app_private.current_role() = 'customer' THEN
+  IF current_user = 'gamehub_customer' THEN
     IF NEW.customer_id IS DISTINCT FROM OLD.customer_id
        OR NEW.email IS DISTINCT FROM OLD.email
        OR NEW.join_date IS DISTINCT FROM OLD.join_date THEN
@@ -697,7 +764,7 @@ LANGUAGE plpgsql
 SET search_path = pg_catalog, app_private
 AS $function$
 BEGIN
-  IF app_private.current_role() = 'customer' THEN
+  IF current_user = 'gamehub_customer' THEN
     IF OLD.status <> 'pending'
        OR NEW.status <> 'cancelled'
        OR (to_jsonb(NEW) - 'status') IS DISTINCT FROM (to_jsonb(OLD) - 'status') THEN
@@ -715,7 +782,7 @@ LANGUAGE plpgsql
 SET search_path = pg_catalog, app_private
 AS $function$
 BEGIN
-  IF app_private.current_role() = 'customer' THEN
+  IF current_user = 'gamehub_customer' THEN
     IF OLD.status <> 'active'
        OR NEW.status <> 'expired'
        OR NEW.end_at > CURRENT_TIMESTAMP
