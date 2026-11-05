@@ -21,6 +21,31 @@ const ROLE_BY_APP_ROLE: Record<DatabaseRole, string> = {
   customer: "gamehub_customer",
 };
 
+let identityResolver: (() => Promise<DatabaseIdentity | null>) | null = null;
+
+export function registerIdentityResolver(
+  resolver: () => Promise<DatabaseIdentity | null>,
+): void {
+  identityResolver = resolver;
+}
+
+export async function resolveCurrentIdentity(): Promise<DatabaseIdentity | null> {
+  const store = identityStorage.getStore();
+  if (store) return store;
+  if (identityResolver) {
+    try {
+      const resolved = await identityResolver();
+      if (resolved) {
+        setDatabaseIdentity(resolved);
+        return resolved;
+      }
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 const globalForPg = globalThis as unknown as { pgPool?: Pool };
 const rawPool =
   globalForPg.pgPool ??
@@ -77,7 +102,10 @@ function instrumentClient(client: PoolClient): PoolClient {
   let transactionIdentity: DatabaseIdentity | null = null;
 
   mutable.query = async (text: string, values?: unknown[]) => {
-    const identity = identityStorage.getStore();
+    let identity: DatabaseIdentity | null | undefined = identityStorage.getStore();
+    if (!identity) {
+      identity = await resolveCurrentIdentity();
+    }
     const command = sqlCommand(text);
 
     if (!identity) {
@@ -151,7 +179,10 @@ async function scopedPoolQuery<T extends QueryResultRow = QueryResultRow>(
     );
   }
 
-  const identity = identityStorage.getStore();
+  let identity: DatabaseIdentity | null | undefined = identityStorage.getStore();
+  if (!identity) {
+    identity = await resolveCurrentIdentity();
+  }
   if (!identity) {
     throw new Error(
       "Refusing an application database query without a verified Supabase identity.",

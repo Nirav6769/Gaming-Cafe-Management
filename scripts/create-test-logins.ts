@@ -108,7 +108,7 @@ async function main() {
     );
 
     for (const acc of accounts) {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { error } = await supabase.auth.signInWithPassword({
         email: acc.email,
         password: "Password123!"
       });

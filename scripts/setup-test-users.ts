@@ -32,7 +32,7 @@ async function main() {
       console.log(`Setting up ${acc.role} account: ${acc.email}...`);
 
       // Sign up via Supabase Auth API
-      const { data, error } = await supabase.auth.signUp({
+      const { error } = await supabase.auth.signUp({
         email: acc.email,
         password: acc.password
       });

@@ -1,8 +1,9 @@
 import "server-only";
 
+import { cache } from "react";
 import { NextResponse } from "next/server";
 import { redirect } from "next/navigation";
-import { setDatabaseIdentity, systemQuery } from "@/lib/db";
+import { registerIdentityResolver, setDatabaseIdentity, systemQuery } from "@/lib/db";
 import { createClient } from "@/lib/supabase/server";
 import {
   decideProfileAccess,
@@ -53,13 +54,13 @@ async function profileForUser(userId: string, email: string | undefined) {
   } satisfies UserProfile;
 }
 
-export async function getCurrentUserProfile(): Promise<UserProfile | null> {
+export const getCurrentUserProfile = cache(async (): Promise<UserProfile | null> => {
   const supabase = await createClient();
   const { data, error } = await supabase.auth.getUser();
 
   if (error || !data.user) return null;
   return profileForUser(data.user.id, data.user.email);
-}
+});
 
 export type ApiRoleResult =
   | { profile: UserProfile; response?: never }
@@ -132,3 +133,12 @@ export async function requirePageRole(allowedRoles: AppRole[]) {
 
   return profile;
 }
+
+registerIdentityResolver(async () => {
+  const profile = await getCurrentUserProfile();
+  if (!profile) return null;
+  return {
+    authUserId: profile.authUserId,
+    role: profile.role,
+  };
+});
