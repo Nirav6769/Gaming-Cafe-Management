@@ -445,6 +445,13 @@ CREATE POLICY gamehub_tournament_registrations_delete ON public.tournament_regis
     OR (
       app_private.current_role() = 'customer'
       AND customer_id = app_private.current_customer_id()
+      AND EXISTS (
+        SELECT 1
+        FROM public.tournaments AS t
+        WHERE t.tournament_id = tournament_registrations.tournament_id
+          AND (t.registration_deadline IS NULL OR CURRENT_TIMESTAMP <= t.registration_deadline)
+          AND CURRENT_DATE < t.start_date
+      )
     )
   );
 
@@ -565,6 +572,7 @@ CREATE POLICY gamehub_orders_insert ON public.orders
     OR (
       app_private.current_role() = 'customer'
       AND customer_id = app_private.current_customer_id()
+      AND created_by = app_private.current_user_id()
     )
   );
 DROP POLICY IF EXISTS gamehub_orders_update ON public.orders;
@@ -660,6 +668,87 @@ CREATE POLICY gamehub_payments_manage ON public.payments
   FOR ALL TO gamehub_runtime
   USING (app_private.current_role() IN ('admin', 'staff'))
   WITH CHECK (app_private.current_role() IN ('admin', 'staff'));
+
+
+-- 7. Prevent customers from changing protected columns even on their own rows.
+-- RLS controls which rows can be touched; these triggers further limit which
+-- fields the customer role may change.
+CREATE OR REPLACE FUNCTION app_private.guard_customer_profile_update()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = pg_catalog, app_private
+AS $function$
+BEGIN
+  IF app_private.current_role() = 'customer' THEN
+    IF NEW.customer_id IS DISTINCT FROM OLD.customer_id
+       OR NEW.email IS DISTINCT FROM OLD.email
+       OR NEW.join_date IS DISTINCT FROM OLD.join_date THEN
+      RAISE EXCEPTION 'Customers may update only their own name and phone number'
+        USING ERRCODE = '42501';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION app_private.guard_customer_order_update()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = pg_catalog, app_private
+AS $function$
+BEGIN
+  IF app_private.current_role() = 'customer' THEN
+    IF OLD.status <> 'pending'
+       OR NEW.status <> 'cancelled'
+       OR (to_jsonb(NEW) - 'status') IS DISTINCT FROM (to_jsonb(OLD) - 'status') THEN
+      RAISE EXCEPTION 'Customers may only cancel their own pending orders'
+        USING ERRCODE = '42501';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION app_private.guard_customer_membership_update()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = pg_catalog, app_private
+AS $function$
+BEGIN
+  IF app_private.current_role() = 'customer' THEN
+    IF OLD.status <> 'active'
+       OR NEW.status <> 'expired'
+       OR NEW.end_at > CURRENT_TIMESTAMP
+       OR (to_jsonb(NEW) - 'status') IS DISTINCT FROM (to_jsonb(OLD) - 'status') THEN
+      RAISE EXCEPTION 'Customers may only expire their own already-ended membership'
+        USING ERRCODE = '42501';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION app_private.guard_customer_profile_update() FROM PUBLIC;
+REVOKE ALL ON FUNCTION app_private.guard_customer_order_update() FROM PUBLIC;
+REVOKE ALL ON FUNCTION app_private.guard_customer_membership_update() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION app_private.guard_customer_profile_update() TO gamehub_runtime;
+GRANT EXECUTE ON FUNCTION app_private.guard_customer_order_update() TO gamehub_runtime;
+GRANT EXECUTE ON FUNCTION app_private.guard_customer_membership_update() TO gamehub_runtime;
+
+DROP TRIGGER IF EXISTS gamehub_guard_customer_profile_update ON public.customers;
+CREATE TRIGGER gamehub_guard_customer_profile_update
+BEFORE UPDATE ON public.customers
+FOR EACH ROW EXECUTE FUNCTION app_private.guard_customer_profile_update();
+
+DROP TRIGGER IF EXISTS gamehub_guard_customer_order_update ON public.orders;
+CREATE TRIGGER gamehub_guard_customer_order_update
+BEFORE UPDATE ON public.orders
+FOR EACH ROW EXECUTE FUNCTION app_private.guard_customer_order_update();
+
+DROP TRIGGER IF EXISTS gamehub_guard_customer_membership_update ON public.customer_memberships;
+CREATE TRIGGER gamehub_guard_customer_membership_update
+BEFORE UPDATE ON public.customer_memberships
+FOR EACH ROW EXECUTE FUNCTION app_private.guard_customer_membership_update();
 
 -- 6. Keep direct PostgREST access closed. The Next.js server uses DATABASE_URL
 -- with the database role switched locally; browser clients use only the
