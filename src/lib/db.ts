@@ -1,3 +1,5 @@
+import "server-only";
+
 import { AsyncLocalStorage } from "node:async_hooks";
 import {
   Pool,
@@ -49,15 +51,16 @@ function sqlCommand(text: unknown): string {
 async function beginWithIdentity(
   rawQuery: RawQuery,
   identity: DatabaseIdentity,
-): Promise<void> {
-  await rawQuery("BEGIN");
+): Promise<QueryResult<any>> {
+  const beginResult = await rawQuery("BEGIN");
   try {
     const databaseRole = ROLE_BY_APP_ROLE[identity.role];
-    await rawQuery(`SET LOCAL ROLE ${databaseRole}`);
+    await rawQuery("SET LOCAL ROLE " + databaseRole);
     await rawQuery(
       "SELECT set_config('gamehub.user_id', $1, TRUE)",
       [identity.authUserId],
     );
+    return beginResult;
   } catch (error) {
     await rawQuery("ROLLBACK").catch(() => undefined);
     throw error;
@@ -78,21 +81,20 @@ function instrumentClient(client: PoolClient): PoolClient {
     const command = sqlCommand(text);
 
     if (!identity) {
-      if (transactionIdentity) {
-        throw new Error(
-          "Database request identity was lost during an open transaction.",
-        );
-      }
-      return originalQuery(text, values);
+      throw new Error(
+        transactionIdentity
+          ? "Database request identity was lost during an open transaction."
+          : "Refusing a database connection without a verified Supabase identity.",
+      );
     }
 
     if (command === "BEGIN" || command === "START") {
       if (transactionIdentity) {
         throw new Error("Nested database transactions are not supported.");
       }
-      await beginWithIdentity(originalQuery, identity);
+      const beginResult = await beginWithIdentity(originalQuery, identity);
       transactionIdentity = identity;
-      return { rows: [], rowCount: null } as QueryResult<any>;
+      return beginResult;
     }
 
     if (command === "COMMIT" || command === "ROLLBACK") {
@@ -130,7 +132,7 @@ function instrumentClient(client: PoolClient): PoolClient {
       transactionIdentity = null;
       void originalQuery("ROLLBACK")
         .catch(() => undefined)
-        .finally(() => originalRelease(error as Error | undefined));
+        .finally(() => originalRelease(error));
       return;
     }
     originalRelease(error as Error | undefined);
