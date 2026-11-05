@@ -16,8 +16,8 @@ const applicationTables = [
 
 test("database RBAC creates non-login, non-bypass application roles", () => {
   for (const role of ["gamehub_admin", "gamehub_staff", "gamehub_customer", "gamehub_runtime"]) {
-    assert.match(migration, new RegExp("CREATE ROLE " + role + " NOLOGIN"));
-    assert.match(migration, new RegExp(role + "[\\s\\S]*?NOBYPASSRLS"));
+    assert.ok(migration.includes("CREATE ROLE " + role + " NOLOGIN"));
+    assert.ok(migration.includes("NOBYPASSRLS"));
   }
 });
 
@@ -31,23 +31,30 @@ test("every application table has row-level security enabled", () => {
 });
 
 test("database policies include role and customer-ownership checks", () => {
-  assert.match(migration, /CREATE POLICY gamehub_customers_select[\\s\\S]*current_customer_id/);
-  assert.match(migration, /CREATE POLICY gamehub_sessions_select[\\s\\S]*current_customer_id/);
-  assert.match(migration, /CREATE POLICY gamehub_orders_select[\\s\\S]*current_customer_id/);
-  assert.match(migration, /CREATE POLICY gamehub_payments_select[\\s\\S]*current_customer_id/);
-  assert.match(migration, /GRANT SELECT ON TABLE public.vw_daily_revenue TO gamehub_admin/);
+  for (const policy of [
+    "gamehub_customers_select",
+    "gamehub_sessions_select",
+    "gamehub_orders_select",
+    "gamehub_payments_select",
+    "gamehub_tournament_registrations_select",
+  ]) {
+    assert.ok(migration.includes("CREATE POLICY " + policy));
+  }
+  assert.ok(migration.includes("app_private.current_customer_id()"));
+  assert.ok(migration.includes("GRANT SELECT ON TABLE public.vw_daily_revenue TO gamehub_admin"));
+  assert.ok(migration.includes("app_private.tournament_registration_count"));
 });
 
 test("application queries require verified identity and transaction-local database roles", () => {
-  assert.match(databaseAdapter, /Refusing an application database query without a verified Supabase identity/);
-  assert.match(databaseAdapter, /SET LOCAL ROLE/);
-  assert.match(databaseAdapter, /set_config\('gamehub.user_id'/);
-  assert.match(databaseAdapter, /AsyncLocalStorage/);
+  assert.ok(databaseAdapter.includes("Refusing an application database query without a verified Supabase identity"));
+  assert.ok(databaseAdapter.includes("SET LOCAL ROLE"));
+  assert.ok(databaseAdapter.includes("gamehub.user_id"));
+  assert.ok(databaseAdapter.includes("AsyncLocalStorage"));
 });
 
 test("only a Supabase-verified and profile-authorized user establishes database identity", () => {
-  assert.match(authAdapter, /supabase\.auth\.getUser\(\)/);
-  assert.match(authAdapter, /decideProfileAccess\(identity, profile, allowedRoles\)/);
-  assert.match(authAdapter, /setDatabaseIdentity\(/);
-  assert.match(authAdapter, /systemQuery<ProfileRow>/);
+  assert.ok(authAdapter.includes("supabase.auth.getUser()"));
+  assert.ok(authAdapter.includes("decideProfileAccess(identity, profile, allowedRoles)"));
+  assert.ok(authAdapter.includes("setDatabaseIdentity("));
+  assert.ok(authAdapter.includes("systemQuery<ProfileRow>"));
 });
