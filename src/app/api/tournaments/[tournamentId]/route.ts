@@ -44,8 +44,7 @@ export async function GET(
       FROM public.tournaments t
       LEFT JOIN public.games g ON g.game_id = t.game_id
       LEFT JOIN public.game_categories gc ON gc.category_id = g.category_id
-      WHERE t.tournament_id = $1
-      ;
+      WHERE t.tournament_id = $1;
     `;
 
     const result = await query(sql, [tournamentId, customerId]);
