@@ -178,7 +178,7 @@ export async function DELETE(
         { status: 400 }
       );
     }
-    if (!tournament.registration_deadline && tournament.start_date && new Date().toISOString().slice(0, 10) > tournament.start_date) {
+    if (tournament.start_date && new Date().toISOString().slice(0, 10) >= tournament.start_date) {
       return NextResponse.json(
         { error: "Tournament has already started. Cancellation is no longer permitted." },
         { status: 400 }

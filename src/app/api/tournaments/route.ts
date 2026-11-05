@@ -46,14 +46,16 @@ export async function GET(request: NextRequest) {
         t.max_participants,
         t.registration_deadline,
         t.description,
-        COUNT(tr.customer_id)::int AS registered_count,
-        COALESCE(bool_or(tr.customer_id = $1), false) AS is_registered
+        app_private.tournament_registration_count(t.tournament_id) AS registered_count,
+        EXISTS (
+          SELECT 1 FROM public.tournament_registrations AS own_registration
+          WHERE own_registration.tournament_id = t.tournament_id
+            AND own_registration.customer_id = $1
+        ) AS is_registered
       FROM public.tournaments t
       LEFT JOIN public.games g ON g.game_id = t.game_id
       LEFT JOIN public.game_categories gc ON gc.category_id = g.category_id
-      LEFT JOIN public.tournament_registrations tr ON tr.tournament_id = t.tournament_id
       ${whereClause}
-      GROUP BY t.tournament_id, g.title, gc.category_name
       ORDER BY t.start_date ASC, t.tournament_id ASC;
     `;
 
