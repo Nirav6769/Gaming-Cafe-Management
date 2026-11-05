@@ -2,7 +2,7 @@ import "server-only";
 
 import { NextResponse } from "next/server";
 import { redirect } from "next/navigation";
-import { query } from "@/lib/db";
+import { setDatabaseIdentity, systemQuery } from "@/lib/db";
 import { createClient } from "@/lib/supabase/server";
 import {
   decideProfileAccess,
@@ -25,7 +25,9 @@ type ProfileRow = {
 };
 
 async function profileForUser(userId: string, email: string | undefined) {
-  const result = await query<ProfileRow>(
+  // This lookup runs before a database identity has been established. It uses
+  // the server-only connection to resolve a Supabase-verified user to a role.
+  const result = await systemQuery<ProfileRow>(
     `SELECT auth_user_id, role, staff_id, customer_id
      FROM public.user_profiles
      WHERE auth_user_id = $1
@@ -102,6 +104,13 @@ export async function requireApiRole(
     };
   }
 
+  // The role and identity come from the verified Supabase user and the
+  // protected user_profiles table, never from browser-supplied request data.
+  setDatabaseIdentity({
+    authUserId: decision.profile.authUserId,
+    role: decision.profile.role,
+  });
+
   return {
     profile: {
       ...decision.profile,
@@ -115,6 +124,11 @@ export async function requirePageRole(allowedRoles: AppRole[]) {
 
   if (!profile) redirect("/login");
   if (!allowedRoles.includes(profile.role)) redirect("/forbidden");
+
+  setDatabaseIdentity({
+    authUserId: profile.authUserId,
+    role: profile.role,
+  });
 
   return profile;
 }
