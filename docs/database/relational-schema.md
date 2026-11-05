@@ -1,239 +1,162 @@
-# GameHub Relational Schema & ER-to-Relational Mapping
+# GameHub — Relational Schema
 
-**Author:** Nikhil  
-**Status:** Final Integrated Schema (Post-Migrations 001, 002, 003, 004)
+**Database:** PostgreSQL on Supabase  
+**Scope:** integrated target schema after baseline and migrations 001–004.
 
----
+**Notation:** PK = primary key; FK = foreign key; UQ = unique; NN = NOT NULL. Names are shown in uppercase for readability; actual PostgreSQL identifiers are lowercase.
 
-## 1. Formal Relational Schema Definition
+## 1. Identity and access
 
-Primary keys are marked with **(PK)**; Foreign keys are marked with **(FK)**; Unique keys are marked with **(UK)**.
+### USER_PROFILES
+`USER_PROFILES(auth_user_id, role, staff_id, customer_id, created_at)`
+- **PK:** `auth_user_id UUID`; **FK:** `auth_user_id → auth.users(id)` ON DELETE CASCADE.
+- **FK + UQ:** `staff_id INTEGER → staff(staff_id)` ON DELETE RESTRICT.
+- **FK + UQ:** `customer_id INTEGER → customers(customer_id)` ON DELETE RESTRICT.
+- `role TEXT NN CHECK role IN ('admin','staff','customer')`; `created_at TIMESTAMPTZ NN DEFAULT CURRENT_TIMESTAMP`.
+- CHECK enforces exactly the appropriate link: admin/staff → staff; customer → customer. Supabase owns `auth.users`.
 
-1. **`user_profiles`** (
-   **`auth_user_id`** PK [UUID] REFERENCES `auth.users(id)`,
-   `role` [TEXT, CHECK: 'admin' | 'staff' | 'customer'],
-   `staff_id` FK, UK [INT, NULLABLE] REFERENCES `staff(staff_id)`,
-   `customer_id` FK, UK [INT, NULLABLE] REFERENCES `customers(customer_id)`,
-   `created_at` [TIMESTAMPTZ]
-   )
+## 2. Core café operations
 
-2. **`customers`** (
-   **`customer_id`** PK [SERIAL],
-   `name` [VARCHAR(100)],
-   `email` UK [VARCHAR(100)],
-   `phone` [VARCHAR(15), NULLABLE],
-   `join_date` [TIMESTAMP],
-   `updated_at` [TIMESTAMPTZ]
-   )
+### CUSTOMERS
+`CUSTOMERS(customer_id, name, email, phone, join_date, updated_at)`
+- **PK:** `customer_id SERIAL`; **UQ:** `email VARCHAR(100)`.
+- `name VARCHAR(100) NN`; `email VARCHAR(100) NN`; `phone VARCHAR(15)`; `join_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP`; `updated_at TIMESTAMPTZ NN DEFAULT CURRENT_TIMESTAMP` (migration 002).
 
-3. **`staff`** (
-   **`staff_id`** PK [SERIAL],
-   `name` [VARCHAR(100)],
-   `role` [VARCHAR(50), CHECK: 'admin' | 'manager' | 'attendant'],
-   `shift` [VARCHAR(50), NULLABLE]
-   )
+### STAFF
+`STAFF(staff_id, name, role, shift)`
+- **PK:** `staff_id SERIAL`.
+- `name VARCHAR(100) NN`; `role VARCHAR(50) CHECK role IN ('admin','manager','attendant')`; `shift VARCHAR(50)`.
 
-4. **`gaming_pcs`** (
-   **`pc_id`** PK [SERIAL],
-   `pc_name` UK [VARCHAR(50)],
-   `status` [VARCHAR(20), CHECK: 'available' | 'occupied' | 'maintenance'],
-   `hourly_rate` [DECIMAL(5,2)]
-   )
+### GAMING_PCS
+`GAMING_PCS(pc_id, pc_name, status, hourly_rate)`
+- **PK:** `pc_id SERIAL`; **UQ:** `pc_name VARCHAR(50)`.
+- `status VARCHAR(20) DEFAULT 'available' CHECK status IN ('available','occupied','maintenance')`; `hourly_rate DECIMAL(5,2) NN`.
 
-5. **`maintenance_records`** (
-   **`maintenance_id`** PK [BIGSERIAL],
-   `pc_id` FK [INT] REFERENCES `gaming_pcs(pc_id)` ON DELETE RESTRICT,
-   `maintenance_date` [DATE],
-   `issue_description` [TEXT],
-   `resolved` [BOOLEAN],
-   `resolved_at` [TIMESTAMP, NULLABLE],
-   UNIQUE(`pc_id`, `maintenance_date`)
-   )
+### GAMING_SESSIONS
+`GAMING_SESSIONS(session_id, customer_id, pc_id, start_time, end_time, total_cost, expected_end_time, reservation_id, hourly_rate_snapshot)`
+- **PK:** `session_id SERIAL`.
+- **FK:** `customer_id → customers(customer_id)` ON DELETE RESTRICT; `pc_id → gaming_pcs(pc_id)` ON DELETE RESTRICT.
+- **FK:** `reservation_id → reservations(reservation_id)` ON DELETE SET NULL.
+- `customer_id INTEGER NN`; `pc_id INTEGER NN`; `start_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP`; `end_time TIMESTAMP`; `total_cost DECIMAL(7,2)`; `expected_end_time TIMESTAMP`; `hourly_rate_snapshot NUMERIC(8,2)`.
+- CHECK: expected end is NULL or later than start. Partial UNIQUE index on `pc_id WHERE end_time IS NULL` permits at most one active session per PC. Billing trigger snapshots the rate and calculates cost.
 
-6. **`reservations`** (
-   **`reservation_id`** PK [SERIAL],
-   `customer_id` FK [INT] REFERENCES `customers(customer_id)` ON DELETE RESTRICT,
-   `pc_id` FK [INT] REFERENCES `gaming_pcs(pc_id)` ON DELETE RESTRICT,
-   `start_time` [TIMESTAMP],
-   `end_time` [TIMESTAMP],
-   `status` [TEXT, CHECK: 'confirmed' | 'cancelled' | 'completed'],
-   `notes` [TEXT, NULLABLE],
-   `created_by_staff_id` FK [INT, NULLABLE] REFERENCES `staff(staff_id)`,
-   `created_at` [TIMESTAMP],
-   EXCLUDE USING gist (`pc_id` WITH =, tsrange(`start_time`, `end_time`) WITH &&) WHERE `status = 'confirmed'`
-   )
+### RESERVATIONS
+`RESERVATIONS(reservation_id, customer_id, pc_id, start_time, end_time, status, notes, created_by_staff_id, created_at)`
+- **PK:** `reservation_id SERIAL`.
+- **FK:** `customer_id → customers(customer_id)` ON DELETE RESTRICT; `pc_id → gaming_pcs(pc_id)` ON DELETE RESTRICT; `created_by_staff_id → staff(staff_id)` ON DELETE SET NULL.
+- `customer_id INTEGER NN`; `pc_id INTEGER NN`; `start_time TIMESTAMP NN`; `end_time TIMESTAMP NN`; `status TEXT NN DEFAULT 'confirmed' CHECK IN ('confirmed','cancelled','completed')`; `notes TEXT`; `created_by_staff_id INTEGER`; `created_at TIMESTAMP NN DEFAULT CURRENT_TIMESTAMP`.
+- CHECK: `end_time > start_time`. GiST exclusion constraint disallows overlapping confirmed time ranges on the same PC.
 
-7. **`gaming_sessions`** (
-   **`session_id`** PK [SERIAL],
-   `customer_id` FK [INT] REFERENCES `customers(customer_id)` ON DELETE RESTRICT,
-   `pc_id` FK [INT] REFERENCES `gaming_pcs(pc_id)` ON DELETE RESTRICT,
-   `start_time` [TIMESTAMP],
-   `end_time` [TIMESTAMP, NULLABLE],
-   `expected_end_time` [TIMESTAMP, NULLABLE],
-   `reservation_id` FK [INT, NULLABLE] REFERENCES `reservations(reservation_id)`,
-   `hourly_rate_snapshot` [NUMERIC(8,2)],
-   `total_cost` [DECIMAL(7,2), NULLABLE]
-   )
+### MAINTENANCE_RECORDS
+`MAINTENANCE_RECORDS(maintenance_id, pc_id, maintenance_date, issue_description, resolved, resolved_at)`
+- **PK:** `maintenance_id BIGSERIAL` (migration 003).
+- **FK:** `pc_id → gaming_pcs(pc_id)` ON DELETE RESTRICT.
+- **UQ:** `(pc_id, maintenance_date)` retains the original weak-entity uniqueness.
+- `maintenance_date DATE NN`; `issue_description TEXT NN`; `resolved BOOLEAN DEFAULT FALSE`; `resolved_at TIMESTAMP`.
 
-8. **`game_categories`** (
-   **`category_id`** PK [SERIAL],
-   `category_name` UK [VARCHAR(50)]
-   )
+## 3. Games and tournaments
 
-9. **`games`** (
-   **`game_id`** PK [SERIAL],
-   `title` [VARCHAR(100)],
-   `category_id` FK [INT, NULLABLE] REFERENCES `game_categories(category_id)` ON DELETE SET NULL,
-   `description` [TEXT, NULLABLE],
-   `search_embedding` [VECTOR(384), NULLABLE],
-   `embedding_model` [TEXT, NULLABLE],
-   `embedding_updated_at` [TIMESTAMPTZ, NULLABLE],
-   `is_active` [BOOLEAN] DEFAULT TRUE
-   )
+### GAME_CATEGORIES
+`GAME_CATEGORIES(category_id, category_name)`
+- **PK:** `category_id SERIAL`; **UQ:** `category_name VARCHAR(50) NN`.
 
-10. **`session_games`** (
-    **`session_id`** PK, FK [INT] REFERENCES `gaming_sessions(session_id)` ON DELETE RESTRICT,
-    **`game_id`** PK, FK [INT] REFERENCES `games(game_id)` ON DELETE RESTRICT,
-    `play_duration_minutes` [INT, NULLABLE],
-    `duration_minutes` [INT, NULLABLE],
-    `added_at` [TIMESTAMP]
-    )
+### GAMES
+`GAMES(game_id, title, category_id, description, search_embedding, embedding_model, embedding_updated_at, is_active)`
+- **PK:** `game_id SERIAL`; **FK:** `category_id → game_categories(category_id)` ON DELETE SET NULL.
+- `title VARCHAR(100) NN`; `category_id INTEGER`; `description TEXT`; `search_embedding VECTOR(384)`; `embedding_model TEXT`; `embedding_updated_at TIMESTAMPTZ`; `is_active BOOLEAN NN DEFAULT TRUE`.
+- Partial HNSW index supports cosine similarity search for non-NULL embeddings.
 
-11. **`tournaments`** (
-    **`tournament_id`** PK [SERIAL],
-    `name` [VARCHAR(100)],
-    `game_id` FK [INT] REFERENCES `games(game_id)`,
-    `prize_pool` [DECIMAL(10,2), CHECK >= 0],
-    `start_date` [DATE],
-    `status` [TEXT, CHECK: 'draft' | 'open' | 'closed' | 'completed' | 'cancelled'],
-    `max_participants` [INT, NULLABLE, CHECK > 0],
-    `registration_deadline` [TIMESTAMPTZ, NULLABLE],
-    `description` [TEXT, NULLABLE]
-    )
+### TOURNAMENTS
+`TOURNAMENTS(tournament_id, name, game_id, prize_pool, start_date, status, max_participants, registration_deadline, description)`
+- **PK:** `tournament_id SERIAL`; **FK:** `game_id → games(game_id)` (default NO ACTION).
+- `name VARCHAR(100) NN`; `game_id INTEGER`; `prize_pool DECIMAL(10,2)`; `start_date DATE NN`; `status TEXT NN DEFAULT 'open' CHECK IN ('draft','open','closed','completed','cancelled')`; `max_participants INTEGER`; `registration_deadline TIMESTAMPTZ`; `description TEXT`.
+- CHECKs: prize pool nonnegative when supplied; max participants positive when supplied.
 
-12. **`tournament_registrations`** (
-    **`tournament_id`** PK, FK [INT] REFERENCES `tournaments(tournament_id)` ON DELETE RESTRICT,
-    **`customer_id`** PK, FK [INT] REFERENCES `customers(customer_id)` ON DELETE RESTRICT,
-    `registration_date` [TIMESTAMP]
-    )
+### SESSION_GAMES
+`SESSION_GAMES(session_id, game_id, play_duration_minutes, duration_minutes, added_at)`
+- **Composite PK:** `(session_id, game_id)`.
+- **FK:** `session_id → gaming_sessions(session_id)` ON DELETE RESTRICT; `game_id → games(game_id)` ON DELETE RESTRICT.
+- `play_duration_minutes INTEGER` (baseline compatibility column); `duration_minutes INTEGER CHECK NULL or >= 0` (migration 003); `added_at TIMESTAMP NN DEFAULT CURRENT_TIMESTAMP`.
 
-13. **`membership_plans`** (
-    **`plan_id`** PK [BIGSERIAL],
-    `name` UK [TEXT],
-    `description` [TEXT, NULLABLE],
-    `duration_days` [INT, CHECK > 0],
-    `price` [NUMERIC(10,2), CHECK >= 0],
-    `discount_percent` [NUMERIC(5,2), CHECK BETWEEN 0 AND 100],
-    `is_active` [BOOLEAN] DEFAULT TRUE,
-    `created_at` [TIMESTAMPTZ]
-    )
+### TOURNAMENT_REGISTRATIONS
+`TOURNAMENT_REGISTRATIONS(tournament_id, customer_id, registration_date)`
+- **Composite PK:** `(tournament_id, customer_id)`.
+- **FK:** `tournament_id → tournaments(tournament_id)` ON DELETE RESTRICT; `customer_id → customers(customer_id)` ON DELETE RESTRICT.
+- `registration_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP`.
 
-14. **`customer_memberships`** (
-    **`membership_id`** PK [BIGSERIAL],
-    `customer_id` FK [INT] REFERENCES `customers(customer_id)` ON DELETE RESTRICT,
-    `plan_id` FK [BIGINT] REFERENCES `membership_plans(plan_id)` ON DELETE RESTRICT,
-    `start_at` [TIMESTAMPTZ],
-    `end_at` [TIMESTAMPTZ],
-    `status` [TEXT, CHECK: 'active' | 'expired' | 'cancelled'],
-    `price_paid` [NUMERIC(10,2), CHECK >= 0],
-    `payment_method` [TEXT, CHECK: 'cash' | 'upi_demo' | 'card_demo'],
-    `created_at` [TIMESTAMPTZ]
-    )
+## 4. Membership and commerce
 
-15. **`snack_items`** (
-    **`snack_id`** PK [BIGSERIAL],
-    `name` UK [TEXT],
-    `category` [TEXT, NULLABLE],
-    `description` [TEXT, NULLABLE],
-    `unit_price` [NUMERIC(10,2), CHECK >= 0],
-    `stock_quantity` [INT, CHECK >= 0],
-    `is_active` [BOOLEAN] DEFAULT TRUE,
-    `updated_at` [TIMESTAMPTZ]
-    )
+### MEMBERSHIP_PLANS
+`MEMBERSHIP_PLANS(plan_id, name, description, duration_days, price, discount_percent, is_active, created_at)`
+- **PK:** `plan_id BIGSERIAL`; **UQ:** `name TEXT NN`.
+- `description TEXT`; `duration_days INTEGER NN CHECK 1..3650`; `price NUMERIC(10,2) NN CHECK >= 0`; `discount_percent NUMERIC(5,2) NN DEFAULT 0 CHECK 0..100`; `is_active BOOLEAN NN DEFAULT TRUE`; `created_at TIMESTAMPTZ NN DEFAULT CURRENT_TIMESTAMP`.
 
-16. **`orders`** (
-    **`order_id`** PK [BIGSERIAL],
-    `customer_id` FK [INT] REFERENCES `customers(customer_id)` ON DELETE RESTRICT,
-    `status` [TEXT, CHECK: 'pending' | 'paid' | 'cancelled' | 'refunded'],
-    `subtotal` [NUMERIC(10,2), CHECK >= 0],
-    `discount_percent_snapshot` [NUMERIC(5,2), CHECK BETWEEN 0 AND 100],
-    `discount_amount` [NUMERIC(10,2), CHECK >= 0],
-    `total_amount` [NUMERIC(10,2), CHECK >= 0],
-    `created_at` [TIMESTAMPTZ],
-    `inventory_deducted_at` [TIMESTAMPTZ, NULLABLE]
-    )
+### CUSTOMER_MEMBERSHIPS
+`CUSTOMER_MEMBERSHIPS(membership_id, customer_id, plan_id, start_at, end_at, status, price_paid, payment_method, created_at)`
+- **PK:** `membership_id BIGSERIAL`.
+- **FK:** `customer_id → customers(customer_id)` ON DELETE RESTRICT; `plan_id → membership_plans(plan_id)` ON DELETE RESTRICT.
+- `customer_id INTEGER NN`; `plan_id BIGINT NN`; `start_at TIMESTAMPTZ NN`; `end_at TIMESTAMPTZ NN`; `status TEXT NN DEFAULT 'active' CHECK IN ('active','expired','cancelled')`; `price_paid NUMERIC(10,2) NN DEFAULT 0 CHECK >= 0`; `payment_method TEXT NN DEFAULT 'cash' CHECK IN ('cash','upi_demo','card_demo')`; `created_at TIMESTAMPTZ NN DEFAULT CURRENT_TIMESTAMP`.
+- CHECK: `end_at > start_at`. Partial UNIQUE index on `customer_id WHERE status='active'`. Insert trigger snapshots plan price and duration.
 
-17. **`order_items`** (
-    **`order_item_id`** PK [BIGSERIAL],
-    `order_id` FK [BIGINT] REFERENCES `orders(order_id)` ON DELETE RESTRICT,
-    `snack_id` FK [BIGINT] REFERENCES `snack_items(snack_id)` ON DELETE RESTRICT,
-    `item_name_snapshot` [TEXT],
-    `quantity` [INT, CHECK > 0],
-    `unit_price_at_purchase` [NUMERIC(10,2), CHECK >= 0],
-    `line_total` [NUMERIC(10,2), CHECK >= 0]
-    )
+### SNACK_ITEMS
+`SNACK_ITEMS(snack_id, name, category, description, unit_price, stock_quantity, is_active, updated_at)`
+- **PK:** `snack_id BIGSERIAL`; **UQ:** `name TEXT NN`.
+- `category TEXT`; `description TEXT`; `unit_price NUMERIC(10,2) NN CHECK >= 0`; `stock_quantity INTEGER NN DEFAULT 0 CHECK >= 0`; `is_active BOOLEAN NN DEFAULT TRUE`; `updated_at TIMESTAMPTZ NN DEFAULT CURRENT_TIMESTAMP`.
 
-18. **`payments`** (
-    **`payment_id`** PK [BIGSERIAL],
-    `order_id` FK, UK [BIGINT] REFERENCES `orders(order_id)` ON DELETE RESTRICT,
-    `amount` [NUMERIC(10,2), CHECK >= 0],
-    `method` [TEXT, CHECK: 'cash' | 'upi_demo' | 'card_demo'],
-    `status` [TEXT, CHECK: 'pending' | 'paid' | 'failed' | 'refunded'],
-    `provider_reference` [TEXT, NULLABLE],
-    `note` [TEXT, NULLABLE],
-    `created_at` [TIMESTAMPTZ]
-    )
+### ORDERS
+`ORDERS(order_id, customer_id, created_by, status, subtotal, discount_amount, total_amount, discount_percent_snapshot, inventory_deducted_at, created_at)`
+- **PK:** `order_id BIGSERIAL`.
+- **FK:** `customer_id → customers(customer_id)` ON DELETE RESTRICT; `created_by → user_profiles(auth_user_id)` ON DELETE SET NULL.
+- `customer_id INTEGER NN`; `created_by UUID`; `status TEXT NN DEFAULT 'pending' CHECK IN ('pending','paid','cancelled','refunded')`; `subtotal NUMERIC(10,2) NN DEFAULT 0 CHECK >= 0`; `discount_amount NUMERIC(10,2) NN DEFAULT 0 CHECK >= 0`; `total_amount NUMERIC(10,2) NN DEFAULT 0 CHECK >= 0`; `discount_percent_snapshot NUMERIC(5,2) NN DEFAULT 0 CHECK 0..100`; `inventory_deducted_at TIMESTAMPTZ`; `created_at TIMESTAMPTZ NN DEFAULT CURRENT_TIMESTAMP`.
+- Database triggers snapshot membership discount and recalculate totals.
 
----
+### ORDER_ITEMS
+`ORDER_ITEMS(order_item_id, order_id, snack_id, item_name_snapshot, quantity, unit_price_at_purchase, line_total)`
+- **PK:** `order_item_id BIGSERIAL`.
+- **FK:** `order_id → orders(order_id)` ON DELETE RESTRICT; `snack_id → snack_items(snack_id)` ON DELETE RESTRICT.
+- `order_id BIGINT NN`; `snack_id BIGINT NN`; `item_name_snapshot TEXT NN`; `quantity INTEGER NN CHECK > 0`; `unit_price_at_purchase NUMERIC(10,2) NN CHECK >= 0`; `line_total NUMERIC(10,2) NN CHECK >= 0`.
+- CHECK: `line_total = ROUND(quantity * unit_price_at_purchase, 2)`. Trigger snapshots item name/price and recalculates pending order totals.
 
-## 2. ER-to-Relational Mapping Methodology
+### PAYMENTS
+`PAYMENTS(payment_id, order_id, amount, method, status, provider_reference, note, created_at)`
+- **PK:** `payment_id BIGSERIAL`; **FK + UQ:** `order_id → orders(order_id)` ON DELETE RESTRICT.
+- `amount NUMERIC(10,2) NN CHECK >= 0`; `method TEXT NN CHECK IN ('cash','upi_demo','card_demo')`; `status TEXT NN DEFAULT 'pending' CHECK IN ('pending','paid','failed','refunded')`; `provider_reference TEXT`; `note TEXT`; `created_at TIMESTAMPTZ NN DEFAULT CURRENT_TIMESTAMP`.
+- UNIQUE `order_id` means each order has at most one payment row. These are academic/demo records, not gateway transactions.
 
-The conversion from conceptual ER diagram to relational tables follows formal database design transformation rules:
+## 5. Associative relations
 
-### Step 1: Mapping Strong Entities
-Each strong entity from the ER diagram maps directly to an independent relational table with its own primary key:
-* `CUSTOMERS` -> `customers(customer_id [PK], ...)`
-* `STAFF` -> `staff(staff_id [PK], ...)`
-* `GAMING_PCS` -> `gaming_pcs(pc_id [PK], ...)`
-* `GAME_CATEGORIES` -> `game_categories(category_id [PK], ...)`
-* `MEMBERSHIP_PLANS` -> `membership_plans(plan_id [PK], ...)`
-* `SNACK_ITEMS` -> `snack_items(snack_id [PK], ...)`
+| Relation | Primary key | Purpose |
+|---|---|---|
+| SESSION_GAMES | `(session_id, game_id)` | Resolves M:N session/game; stores play duration. |
+| TOURNAMENT_REGISTRATIONS | `(tournament_id, customer_id)` | Resolves M:N tournament/customer; stores registration date. |
+| ORDER_ITEMS | `order_item_id` | Resolves M:N order/snack; stores quantity and historical price/name. |
+| CUSTOMER_MEMBERSHIPS | `membership_id` | Records customer plan purchases over time. |
 
-### Step 2: Mapping Weak Entities
-* `MAINTENANCE_RECORDS` is existence-dependent on `GAMING_PCS`.
-* Originally identified by the composite key `(pc_id, maintenance_date)`.
-* In migration 003, it was enhanced with a surrogate primary key `maintenance_id BIGSERIAL` to allow multiple maintenance entries per machine per day while preserving a `UNIQUE(pc_id, maintenance_date)` secondary constraint.
+## 6. Views (derived relations, not base tables)
 
-### Step 3: Mapping 1:N Binary Relationships
-For each 1:N relationship, the primary key of the "1" side is embedded as a foreign key on the "N" side:
-* `CUSTOMERS (1) -> RESERVATIONS (N)`: `customer_id` placed as FK in `reservations`.
-* `GAMING_PCS (1) -> RESERVATIONS (N)`: `pc_id` placed as FK in `reservations`.
-* `CUSTOMERS (1) -> GAMING_SESSIONS (N)`: `customer_id` placed as FK in `gaming_sessions`.
-* `GAMING_PCS (1) -> GAMING_SESSIONS (N)`: `pc_id` placed as FK in `gaming_sessions`.
-* `GAME_CATEGORIES (1) -> GAMES (N)`: `category_id` placed as FK in `games`.
-* `GAMES (1) -> TOURNAMENTS (N)`: `game_id` placed as FK in `tournaments`.
-* `MEMBERSHIP_PLANS (1) -> CUSTOMER_MEMBERSHIPS (N)`: `plan_id` placed as FK in `customer_memberships`.
-* `CUSTOMERS (1) -> ORDERS (N)`: `customer_id` placed as FK in `orders`.
+- `vw_active_customer_memberships`: active, currently valid memberships with customer and plan details.
+- `vw_snack_sales_summary`: units sold and gross sales by snack.
+- `vw_popular_games`: play counts and recorded minutes by game.
+- `vw_pc_usage_summary`: completed sessions, usage time and session revenue by PC.
+- `vw_daily_revenue`: daily revenue from sessions, snack payments and memberships.
 
-### Step 4: Mapping M:N Binary Relationships into Associative Junction Tables
-In relational modeling, M:N relationships cannot be represented with single foreign keys and require intermediate junction relations:
-1. **Gaming Sessions and Games (M:N):**
-   * Resolved by table `session_games`.
-   * Composite Primary Key: `(session_id, game_id)`.
-   * Relationship attributes: `duration_minutes`, `added_at`.
-2. **Tournaments and Customers (M:N):**
-   * Resolved by table `tournament_registrations`.
-   * Composite Primary Key: `(tournament_id, customer_id)`.
-   * Relationship attribute: `registration_date`.
-   * Enforces that a customer can register at most once per tournament.
-3. **Orders and Snack Items (M:N):**
-   * Resolved by table `order_items`.
-   * Surrogate PK: `order_item_id BIGSERIAL`.
-   * Foreign keys: `order_id`, `snack_id`.
-   * Snapshot attributes: `item_name_snapshot`, `unit_price_at_purchase`, `quantity`, `line_total`.
+## 7. Normalization and functional-dependency notes
 
-### Step 5: Mapping 1:1 Relationships
-* **`orders (1) -> payments (1)`:**
-  * Handled by embedding `order_id` in `payments` with a `UNIQUE` constraint, guaranteeing that each order maps to exactly one payment record.
-* **`user_profiles (1) -> staff / customers (1)`:**
-  * Handled with nullable unique foreign keys `staff_id UNIQUE` and `customer_id UNIQUE` checked mutually exclusively with `user_profiles_role_link_check`.
+- Entity keys determine their descriptive attributes (e.g. `customer_id → name, email, phone, join_date, updated_at`).
+- Alternate unique keys include customer email, PC name, category name, membership-plan name and snack name; `payments.order_id` is also unique.
+- Composite keys prevent duplicate session/game and tournament/customer pairs.
+- `ORDER_ITEMS` stores name and unit-price snapshots intentionally: later catalogue edits must not rewrite historical purchases. Session hourly-rate snapshots and membership price-paid values serve the same purpose.
+- Totals, PC status and some lifecycle fields are trigger-maintained/validated. They are not intended to be freely supplied by the client.
+
+## 8. Migration order
+
+For a **fresh** database, the repository documents this order:
+1. `database/schema.sql`
+2. `database/seed.sql`
+3. `database/mvp_migration.sql`
+4. `database/migrations/001_auth_foundation.sql`
+5. `database/migrations/002_commerce.sql`
+6. `database/migrations/003_operations.sql`
+7. `database/migrations/004_games_analytics.sql`
+
+Do not rerun the non-idempotent baseline schema on an already initialized database. This document describes the integrated target design; compare it with the live Supabase catalog after applying migrations before claiming it exactly matches the deployed database.
