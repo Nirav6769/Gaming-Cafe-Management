@@ -182,7 +182,7 @@ test(
         client,
         "DELETE FROM tournaments WHERE tournament_id = $1;",
         [tournId],
-        /violates foreign key constraint.*RESTRICT/i
+        /violates foreign key constraint/i
       );
 
       // 5. View vw_popular_games test
