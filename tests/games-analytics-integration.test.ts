@@ -43,11 +43,23 @@ test(
         END $$;
 
         CREATE EXTENSION IF NOT EXISTS vector;
-        CREATE SCHEMA IF NOT EXISTS auth;
-        CREATE TABLE IF NOT EXISTS auth.users (
-          id UUID PRIMARY KEY,
-          email TEXT
-        );
+        DO $$
+        BEGIN
+          IF NOT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = 'auth') THEN
+            BEGIN
+              EXECUTE 'CREATE SCHEMA auth';
+              EXECUTE 'CREATE TABLE auth.users (id UUID PRIMARY KEY, email TEXT)';
+            EXCEPTION
+              WHEN insufficient_privilege THEN NULL;
+            END;
+          ELSIF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'auth' AND table_name = 'users') THEN
+            BEGIN
+              EXECUTE 'CREATE TABLE auth.users (id UUID PRIMARY KEY, email TEXT)';
+            EXCEPTION
+              WHEN insufficient_privilege THEN NULL;
+            END;
+          END IF;
+        END $$;
       `);
 
       // 2. Provision baseline schema if not already present

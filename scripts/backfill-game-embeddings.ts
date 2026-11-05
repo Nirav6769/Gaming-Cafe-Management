@@ -7,6 +7,12 @@ import {
 } from "../src/lib/embeddings/game-embeddings";
 
 async function backfill() {
+  try {
+    process.loadEnvFile?.(".env.local");
+  } catch {
+    // Ignore missing .env.local file
+  }
+
   const databaseUrl = process.env.DATABASE_URL || process.env.TEST_DATABASE_URL;
   if (!databaseUrl) {
     console.error("Error: DATABASE_URL (or TEST_DATABASE_URL) environment variable is required.");
