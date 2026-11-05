@@ -50,28 +50,47 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   const body = await request.json().catch(() => null);
   const sessionId = Number(body?.sessionId);
-  if (!Number.isInteger(sessionId)) return NextResponse.json({ error: "Valid session ID required." }, { status: 400 });
+  if (!Number.isInteger(sessionId) || sessionId < 1) {
+    return NextResponse.json({ error: "Valid session ID required." }, { status: 400 });
+  }
+
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+
+    // Lock the active session and its PC so concurrent end requests cannot bill twice.
     const result = await client.query(`SELECT s.session_id, s.pc_id, s.start_time, p.hourly_rate
-      FROM gaming_sessions s JOIN gaming_pcs p ON p.pc_id = s.pc_id
-      WHERE s.session_id = $1 AND s.end_time IS NULL FOR UPDATE OF s, p`, [sessionId]);
-    if (!result.rowCount) throw new Error("Active session not found.");
+      FROM gaming_sessions s
+      JOIN gaming_pcs p ON p.pc_id = s.pc_id
+      WHERE s.session_id = $1 AND s.end_time IS NULL
+      FOR UPDATE OF s, p`, [sessionId]);
+
+    if (!result.rowCount) {
+      await client.query("ROLLBACK");
+      return NextResponse.json({ error: "Active session not found; it may already have ended." }, { status: 404 });
+    }
+
     const session = result.rows[0];
+
+    // Calculate from the locked session and the PC's rate, then return the persisted row.
     const updated = await client.query(`UPDATE gaming_sessions
       SET end_time = CURRENT_TIMESTAMP,
-          total_cost = ROUND((hourly_rate * GREATEST(EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - $2::timestamp)) / 3600, 0))::numeric, 2)
-      FROM gaming_pcs
-      WHERE gaming_sessions.session_id = $1 AND gaming_pcs.pc_id = $3
-      RETURNING gaming_sessions.session_id, gaming_sessions.end_time, gaming_sessions.total_cost`,
-      [sessionId, session.start_time, session.pc_id]);
+          total_cost = ROUND((
+            $4::numeric * GREATEST(EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - $2::timestamp)) / 3600, 0)
+          )::numeric, 2)
+      WHERE session_id = $1 AND end_time IS NULL
+      RETURNING session_id, pc_id, start_time, end_time, total_cost`,
+      [sessionId, session.start_time, session.pc_id, session.hourly_rate]);
+
+    if (!updated.rowCount) throw new Error("Session could not be ended.");
+
     await client.query("UPDATE gaming_pcs SET status = 'available' WHERE pc_id = $1", [session.pc_id]);
     await client.query("COMMIT");
-    return NextResponse.json(updated.rows[0]);
+
+    return NextResponse.json({ success: true, session: updated.rows[0] });
   } catch (error) {
     await client.query("ROLLBACK");
-    return NextResponse.json({ error: errorMessage(error) }, { status: 409 });
+    return NextResponse.json({ error: errorMessage(error) }, { status: 500 });
   } finally {
     client.release();
   }
