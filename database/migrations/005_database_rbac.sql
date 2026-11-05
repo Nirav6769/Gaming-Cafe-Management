@@ -93,6 +93,36 @@ AS $function$
   LIMIT 1;
 $function$;
 
+
+-- Aggregate-only helper: expose tournament capacity counts without exposing
+-- other customers' registration rows through RLS.
+CREATE OR REPLACE FUNCTION app_private.tournament_registration_count(p_tournament_id INTEGER)
+RETURNS INTEGER
+LANGUAGE SQL
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, public, app_private
+AS $function$
+  SELECT CASE
+    WHEN app_private.current_role() IN ('admin', 'staff')
+      OR EXISTS (
+        SELECT 1
+        FROM public.tournaments AS t
+        WHERE t.tournament_id = p_tournament_id
+          AND t.status <> 'draft'
+      )
+    THEN (
+      SELECT COUNT(*)::INTEGER
+      FROM public.tournament_registrations AS tr
+      WHERE tr.tournament_id = p_tournament_id
+    )
+    ELSE NULL
+  END;
+$function$;
+
+REVOKE ALL ON FUNCTION app_private.tournament_registration_count(INTEGER) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION app_private.tournament_registration_count(INTEGER) TO gamehub_runtime;
+
 REVOKE ALL ON FUNCTION app_private.current_user_id() FROM PUBLIC;
 REVOKE ALL ON FUNCTION app_private.current_role() FROM PUBLIC;
 REVOKE ALL ON FUNCTION app_private.current_customer_id() FROM PUBLIC;
