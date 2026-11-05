@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
 import { query, errorMessage } from "@/lib/db";
+import { requireApiRole } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  const auth = await requireApiRole(["admin", "staff"]);
+  if (auth.response) return auth.response;
+
   try {
     const [pcs, sessions, revenue] = await Promise.all([
       query(`SELECT COUNT(*)::int AS total,

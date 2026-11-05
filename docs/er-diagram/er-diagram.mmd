@@ -1,0 +1,208 @@
+erDiagram
+    %% ============================================================================
+    %% GameHub: Integrated Entity-Relationship (ER) Diagram
+    %% Covering All Modules: Auth, Operations, Commerce, Games, Tournaments
+    %% ============================================================================
+
+    USER_PROFILES {
+        uuid auth_user_id PK
+        string role "admin | staff | customer"
+        int staff_id FK "nullable"
+        int customer_id FK "nullable"
+        timestamp created_at
+    }
+
+    CUSTOMERS {
+        int customer_id PK
+        string name
+        string email UK
+        string phone
+        timestamp join_date
+        timestamp updated_at
+    }
+
+    STAFF {
+        int staff_id PK
+        string name
+        string role "admin | manager | attendant"
+        string shift
+    }
+
+    GAMING_PCS {
+        int pc_id PK
+        string pc_name UK
+        string status "available | occupied | maintenance"
+        decimal hourly_rate
+    }
+
+    MAINTENANCE_RECORDS {
+        bigint maintenance_id PK
+        int pc_id FK
+        date maintenance_date
+        string issue_description
+        boolean resolved
+        timestamp resolved_at
+    }
+
+    RESERVATIONS {
+        int reservation_id PK
+        int customer_id FK
+        int pc_id FK
+        timestamp start_time
+        timestamp end_time
+        string status "confirmed | cancelled | completed"
+        string notes
+        int created_by_staff_id FK
+        timestamp created_at
+    }
+
+    GAMING_SESSIONS {
+        int session_id PK
+        int customer_id FK
+        int pc_id FK
+        timestamp start_time
+        timestamp end_time
+        timestamp expected_end_time
+        int reservation_id FK
+        decimal hourly_rate_snapshot
+        decimal total_cost
+    }
+
+    GAME_CATEGORIES {
+        int category_id PK
+        string category_name UK
+    }
+
+    GAMES {
+        int game_id PK
+        string title
+        int category_id FK
+        string description
+        vector search_embedding "384 dimensions"
+        string embedding_model
+        timestamp embedding_updated_at
+        boolean is_active
+    }
+
+    SESSION_GAMES {
+        int session_id PK,FK
+        int game_id PK,FK
+        int duration_minutes
+        timestamp added_at
+    }
+
+    TOURNAMENTS {
+        int tournament_id PK
+        string name
+        int game_id FK
+        decimal prize_pool
+        date start_date
+        string status "draft | open | closed | completed | cancelled"
+        int max_participants
+        timestamp registration_deadline
+        string description
+    }
+
+    TOURNAMENT_REGISTRATIONS {
+        int tournament_id PK,FK
+        int customer_id PK,FK
+        timestamp registration_date
+    }
+
+    MEMBERSHIP_PLANS {
+        bigint plan_id PK
+        string name UK
+        string description
+        int duration_days
+        decimal price
+        decimal discount_percent
+        boolean is_active
+        timestamp created_at
+    }
+
+    CUSTOMER_MEMBERSHIPS {
+        bigint membership_id PK
+        int customer_id FK
+        bigint plan_id FK
+        timestamp start_at
+        timestamp end_at
+        string status "active | expired | cancelled"
+        decimal price_paid
+        string payment_method "cash | upi_demo | card_demo"
+        timestamp created_at
+    }
+
+    SNACK_ITEMS {
+        bigint snack_id PK
+        string name UK
+        string category
+        string description
+        decimal unit_price
+        int stock_quantity
+        boolean is_active
+        timestamp updated_at
+    }
+
+    ORDERS {
+        bigint order_id PK
+        int customer_id FK
+        string status "pending | paid | cancelled | refunded"
+        decimal subtotal
+        decimal discount_percent_snapshot
+        decimal discount_amount
+        decimal total_amount
+        timestamp created_at
+        timestamp inventory_deducted_at
+    }
+
+    ORDER_ITEMS {
+        bigint order_item_id PK
+        bigint order_id FK
+        bigint snack_id FK
+        string item_name_snapshot
+        int quantity
+        decimal unit_price_at_purchase
+        decimal line_total
+    }
+
+    PAYMENTS {
+        bigint payment_id PK
+        bigint order_id FK,UK
+        decimal amount
+        string method "cash | upi_demo | card_demo"
+        string status "pending | paid | failed | refunded"
+        string provider_reference
+        string note
+        timestamp created_at
+    }
+
+    %% Entity Relationships
+    CUSTOMERS ||--o| USER_PROFILES : "authenticates via"
+    STAFF ||--o| USER_PROFILES : "authenticates via"
+
+    CUSTOMERS ||--o{ RESERVATIONS : "books"
+    GAMING_PCS ||--o{ RESERVATIONS : "reserved for"
+    STAFF ||--o{ RESERVATIONS : "assists booking"
+
+    CUSTOMERS ||--o{ GAMING_SESSIONS : "plays"
+    GAMING_PCS ||--o{ GAMING_SESSIONS : "hosts"
+    RESERVATIONS ||--o| GAMING_SESSIONS : "initiates"
+
+    GAMING_PCS ||--o{ MAINTENANCE_RECORDS : "undergoes"
+
+    GAME_CATEGORIES ||--o{ GAMES : "classifies"
+    GAMES ||--o{ TOURNAMENTS : "featured in"
+
+    GAMING_SESSIONS ||--o{ SESSION_GAMES : "contains"
+    GAMES ||--o{ SESSION_GAMES : "played in"
+
+    TOURNAMENTS ||--o{ TOURNAMENT_REGISTRATIONS : "enrolls"
+    CUSTOMERS ||--o{ TOURNAMENT_REGISTRATIONS : "registers for"
+
+    CUSTOMERS ||--o{ CUSTOMER_MEMBERSHIPS : "subscribes to"
+    MEMBERSHIP_PLANS ||--o{ CUSTOMER_MEMBERSHIPS : "defines"
+
+    CUSTOMERS ||--o{ ORDERS : "places"
+    ORDERS ||--|{ ORDER_ITEMS : "contains"
+    SNACK_ITEMS ||--o{ ORDER_ITEMS : "purchased in"
+    ORDERS ||--o| PAYMENTS : "settled with"
